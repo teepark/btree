@@ -361,7 +361,6 @@ traverse_nodes(btreeobject *tree, char down, nodevisitor pred, void *data) {
 }
 
 
-#if 0 /* until this has a use */
 /*
  * generalized in-order python object traverser
  */
@@ -400,7 +399,6 @@ static int
 traverse_items(btreeobject *tree, itemvisitor pred, void *data) {
     return traverse_items_recursion(tree->root, 0, tree->depth, pred, data);
 }
-#endif
 
 
 /*
@@ -593,8 +591,30 @@ python_btree_insert(PyObject *self, PyObject *args) {
 }
 
 
+/*
+ * python as_list method for getting the items out
+ */
+static int
+as_list_item_visitor(PyObject *item, char is_branch, int depth, void *data) {
+    return PyList_Append((PyObject *)data, item);
+}
+
+static PyObject *
+python_btree_as_list(PyObject *self, PyObject *args) {
+    btreeobject *tree = (btreeobject *)self;
+    int rc;
+    PyObject *list = PyList_New(0);
+
+    if ((rc = traverse_items(tree, as_list_item_visitor, (void *)list)))
+        return NULL;
+
+    return list;
+}
+
+
 static PyMethodDef btree_methods[] = {
     {"insert", python_btree_insert, METH_VARARGS, "no docs yet"},
+    {"as_list", python_btree_as_list, METH_NOARGS, "no docs yet"},
     {NULL, NULL, 0, NULL}
 };
 
