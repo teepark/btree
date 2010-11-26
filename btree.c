@@ -116,8 +116,8 @@ pass_left(char is_branch, node_t *source, node_t *target, int count,
                 sizeof(node_t *) * count);
 
         /* move down the source's remaining children */
-        memmove(src_b->children + src_b->filled + 1, src_b->children,
-                sizeof(node_t *) * count);
+        memmove(src_b->children, src_b->children + count,
+                sizeof(node_t *) * (src_b->filled - count + 1));
     }
 
     target->filled += count;
