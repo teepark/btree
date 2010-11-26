@@ -228,7 +228,7 @@ shrink_node(char is_branch, node_t *node, path_t *path) {
      * push the median value up to the parent
      */
 
-    if (!path->depth) {
+    if (!(path->depth)) {
         /* if we were the root, we're going to need a parent now */
         parent = (branch_t *)allocate_node(1, path->tree->order);
 
@@ -241,11 +241,13 @@ shrink_node(char is_branch, node_t *node, path_t *path) {
         path->tree->depth++;
     } else {
         /* if we need to, make space in the parent's arrays */
-        if (parent_index < parent->filled - 1) {
+        if (parent_index < parent->filled) {
             memmove(parent->values + parent_index + 1,
-                    parent->values + parent_index, sizeof(PyObject *));
+                    parent->values + parent_index,
+                    sizeof(PyObject *) * (parent->filled - parent_index));
             memmove(parent->children + parent_index + 2,
-                    parent->children + parent_index + 1, sizeof(node_t *));
+                    parent->children + parent_index + 1,
+                    sizeof(node_t *) * (parent->filled - parent_index));
         }
 
         parent->values[parent_index] = median;
@@ -645,8 +647,8 @@ PyTypeObject btreetype = {
     0,                                         /* tp_descr_set */
     0,                                         /* tp_dictoffset */
     btreeobject_init,                          /* tp_init */
-	PyType_GenericAlloc,                       /* tp_alloc */
-	PyType_GenericNew,                         /* tp_new */
+    PyType_GenericAlloc,                       /* tp_alloc */
+    PyType_GenericNew,                         /* tp_new */
 #if BOTHER_WITH_GC
     PyObject_GC_Del,                           /* tp_free */
 #else
