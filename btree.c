@@ -76,11 +76,11 @@ allocate_node(char is_branch, int order) {
 static void
 free_node(char is_branch, node_t *node) {
     int i;
-    if (is_branch)
-        free(((branch_t *)node)->children);
     for (i = 0; i < node->filled; ++i)
         Py_DECREF(node->values[i]);
     free(node->values);
+    if (is_branch)
+        free(((branch_t *)node)->children);
     free(node);
 }
 
@@ -115,7 +115,7 @@ pass_left(char is_branch, node_t *source, node_t *target, int count,
         memcpy(tgt_b->children + tgt_b->filled + 1, src_b->children,
                 sizeof(node_t *) * count);
 
-        /* move down the source's remaining children */
+        /* move over the source's remaining children */
         memmove(src_b->children, src_b->children + count,
                 sizeof(node_t *) * (src_b->filled - count + 1));
     }
@@ -147,20 +147,21 @@ pass_right(char is_branch, node_t *source, node_t *target, int count,
     memcpy(target->values, source->values - count,
             sizeof(PyObject *) * (count - 1));
 
+    if (is_branch) {
+        branch_t *src = (branch_t *)source;
+        branch_t *tgt = (branch_t *)target;
+
+        /* make space for the same number of child nodes */
+        memmove(tgt->children + count, tgt->children,
+                sizeof(node_t *) * (tgt->filled + 1));
+
+        /* move over the children from source to target */
+        memcpy(tgt->children, src->children + src->filled,
+                sizeof(node_t *) * count);
+    }
+
     target->filled += count;
     source->filled -= count;
-
-    if (!is_branch) return;
-
-    branch_t *src = (branch_t *)source;
-    branch_t *tgt = (branch_t *)target;
-
-    /* make space for the same number of child nodes */
-    memmove(tgt->children + count, tgt->children, sizeof(node_t *) * count);
-
-    /* move over the children from source to target */
-    memcpy(tgt->children, src->children + src->filled + 1,
-            sizeof(node_t *) * tgt->filled);
 }
 
 
@@ -349,7 +350,7 @@ traverse_nodes_recursion(node_t *node, int depth, int leaf_depth, char down,
                 return rc;
     }
 
-    if (!(down) && (rc = pred(node, depth != leaf_depth, depth, data)))
+    if (!down && (rc = pred(node, depth != leaf_depth, depth, data)))
         return rc;
 
     return 0;
