@@ -309,7 +309,7 @@ leaf_insert(PyObject *value, path_t *path) {
 /*
  * trace a path to the appropriate leaf for insertion
  */
-static void
+static int
 find_path_to_leaf(btreeobject *tree, PyObject *value, path_t *path) {
     int i, index;
     node_t *node = (node_t *)(tree->root);
@@ -319,11 +319,13 @@ find_path_to_leaf(btreeobject *tree, PyObject *value, path_t *path) {
     for (i = 0; i <= tree->depth; ++i) {
         if (i) node = ((branch_t *)node)->children[index];
 
-        index = bisect_left(node->values, node->filled, value);
+        if ((index = bisect_left(node->values, node->filled, value)) < 0)
+            return index;
         path->lineage[i] = node;
         path->indexes[i] = index;
     }
     path->depth = tree->depth;
+    return 0;
 }
 
 
@@ -583,7 +585,10 @@ python_btree_insert(PyObject *self, PyObject *args) {
 
     Py_INCREF(value);
 
-    find_path_to_leaf(tree, value, &path);
+    if (find_path_to_leaf(tree, value, &path)) {
+        Py_DECREF(value);
+        return NULL;
+    }
 
     leaf_insert(value, &path);
 
