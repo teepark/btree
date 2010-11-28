@@ -31,6 +31,8 @@ free_node(char is_branch, node_t *node) {
         Py_DECREF(node->values[i]);
     free(node->values);
     if (is_branch)
+        /* relax, this only frees the child pointers,
+         * not the child nodes themselves. */
         free(((branch_t *)node)->children);
     free(node);
 }
@@ -227,8 +229,9 @@ bisect_left(PyObject **array, int array_length, PyObject *value) {
         mid;
     while (min < max) {
         mid = (max + min) / 2;
-        if (PyObject_Cmp(value, array[mid], &cmp) < 0) return -1;
-        if (cmp > 0) min = mid + 1;
+        if ((cmp = PyObject_RichCompareBool(value, array[mid], Py_GT)) < 0)
+            return cmp;
+        if (cmp) min = mid + 1;
         else max = mid;
     }
     return min;
