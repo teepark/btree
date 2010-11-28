@@ -1,56 +1,7 @@
 #include "Python.h"
+#include "btree.h"
 
 #define BOTHER_WITH_GC 1
-
-
-/*
- * leaf and branch nodes, and a generic node_t to which they are both castable
- */
-#define NODE_HEAD      \
-    int filled;        \
-    PyObject **values; \
-
-typedef struct btree_leaf {
-    NODE_HEAD
-} leaf_t;
-
-typedef leaf_t node_t;
-
-typedef struct btree_branch {
-    NODE_HEAD
-    node_t **children;
-} branch_t;
-
-/*
- * the PyObject that wraps a root node and gets exposed to python
- */
-typedef struct {
-    PyObject_HEAD
-    int order;
-    int depth;
-    int length;
-    node_t *root;
-    leaf_t *beginning;
-} btreeobject;
-
-/*
- * the necessary info to save our position and be
- * able to pick up traversing the tree in order
- */
-typedef struct {
-    int depth;
-    int *indexes;
-    node_t **lineage;
-
-    btreeobject *tree;
-} path_t;
-
-
-typedef int (*nodevisitor)(
-        node_t *node, char is_branch, int depth, void *data);
-
-typedef int (*itemvisitor)(
-        PyObject *item, char is_branch, int depth, void *data);
 
 
 /*
@@ -321,6 +272,7 @@ find_path_to_leaf(btreeobject *tree, PyObject *value, path_t *path) {
 
         if ((index = bisect_left(node->values, node->filled, value)) < 0)
             return index;
+
         path->lineage[i] = node;
         path->indexes[i] = index;
     }
@@ -572,28 +524,42 @@ python_btree_repr(PyObject *self) {
  */
 static PyObject *
 python_btree_insert(PyObject *self, PyObject *args) {
-    PyObject *value;
+    PyObject *item;
     btreeobject *tree = (btreeobject *)self;
+    PYBTREE_STACK_ALLOC_PATH(tree);
 
-    path_t path;
-    int path_indexes[tree->depth];
-    node_t *path_lineage[tree->depth];
-    path.indexes = path_indexes;
-    path.lineage = path_lineage;
+    if (!PyArg_ParseTuple(args, "O", &item)) return NULL;
 
-    if (!PyArg_ParseTuple(args, "O", &value)) return NULL;
+    Py_INCREF(item);
 
-    Py_INCREF(value);
-
-    if (find_path_to_leaf(tree, value, &path)) {
-        Py_DECREF(value);
+    if (find_path_to_leaf(tree, item, &path)) {
+        Py_DECREF(item);
         return NULL;
     }
 
-    leaf_insert(value, &path);
+    leaf_insert(item, &path);
 
     Py_INCREF(Py_None);
     return Py_None;
+}
+
+
+/*
+ * C api function for btree insert
+ */
+int
+pybtree_insert(btreeobject *tree, PyObject *item) {
+    int rc;
+    PYBTREE_STACK_ALLOC_PATH(tree);
+
+    Py_INCREF(item);
+    if ((rc = find_path_to_leaf(tree, item, &path))) {
+        Py_DECREF(item);
+        return rc;
+    }
+
+    leaf_insert(item, &path);
+    return 0;
 }
 
 
