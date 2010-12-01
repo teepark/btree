@@ -122,10 +122,11 @@ pass_right(char is_branch, node_t *source, node_t *target, int count,
  * shrink a node to preserve the btree invariants
  */
 static void
-shrink_node(char is_branch, node_t *node, path_t *path) {
+shrink_node(path_t *path) {
     int parent_index = -1;
     branch_t *parent = NULL;
     node_t *sibling;
+    node_t *node = path->lineage[path->depth];
 
     int middle;
     PyObject *median;
@@ -139,7 +140,7 @@ shrink_node(char is_branch, node_t *node, path_t *path) {
         if (parent_index) {
             sibling = parent->children[parent_index - 1];
             if (sibling->filled < path->tree->order) {
-                pass_left(is_branch, node, sibling, 1,
+                pass_left(path->depth < path->tree->depth, node, sibling, 1,
                         parent, parent_index - 1);
                 return;
             }
@@ -150,7 +151,7 @@ shrink_node(char is_branch, node_t *node, path_t *path) {
             sibling = parent->children[parent_index + 1];
 
             if (sibling->filled < path->tree->order) {
-                pass_right(is_branch, node, sibling, 1,
+                pass_right(path->depth < path->tree->depth, node, sibling, 1,
                         parent, parent_index);
                 return;
             }
@@ -166,11 +167,12 @@ shrink_node(char is_branch, node_t *node, path_t *path) {
     median = node->values[middle];
 
     /* put the second half of the node's data in a new sibling */
-    sibling = allocate_node(is_branch, path->tree->order);
+    sibling = allocate_node(
+            path->depth < path->tree->depth, path->tree->order);
     sibling->filled = node->filled - middle - 1;
     memcpy(sibling->values, node->values + middle + 1,
             sizeof(PyObject *) * sibling->filled);
-    if (is_branch)
+    if (path->depth < path->tree->depth)
         memcpy(((branch_t *)sibling)->children,
                 ((branch_t *)node)->children + middle + 1,
                 sizeof(node_t *) * (node->filled - middle));
@@ -212,7 +214,7 @@ shrink_node(char is_branch, node_t *node, path_t *path) {
     /* now if the parent node is overflowed then it too needs to shrink */
     if (parent->filled > path->tree->order) {
         path->depth--;
-        shrink_node(1, (node_t *)parent, path);
+        shrink_node(path);
     }
 }
 
@@ -256,7 +258,7 @@ leaf_insert(PyObject *value, path_t *path) {
 
     /* now if the node is overfilled, correct it */
     if (leaf->filled > path->tree->order)
-        shrink_node(0, leaf, path);
+        shrink_node(path);
 }
 
 
@@ -596,7 +598,7 @@ static PyMethodDef btree_methods[] = {
 /*
  * the full type definition for the python object
  */
-PyTypeObject btreetype = {
+static PyTypeObject btreetype = {
     PyObject_HEAD_INIT(&PyType_Type)
     0,
     "btree.btree",
