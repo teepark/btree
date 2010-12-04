@@ -38,17 +38,26 @@ typedef struct {
     int depth;
     int *indexes;
     node_t **lineage;
-
     btreeobject *tree;
 } path_t;
 
-#define PYBTREE_STACK_ALLOC_PATH(tree) \
-    path_t path;                       \
-    int _indexes[(tree)->depth];       \
-    node_t *_lineage[(tree)->depth];   \
-    path.tree = (tree);                \
-    path.indexes = _indexes;           \
+#define PYBTREE_STACK_ALLOC_PATH(tree)   \
+    path_t path;                         \
+    int _indexes[(tree)->depth + 1];     \
+    node_t *_lineage[(tree)->depth + 1]; \
+    path.tree = (tree);                  \
+    path.indexes = _indexes;             \
     path.lineage = _lineage;
+
+
+/*
+ * the PyObject of a btree iterator
+ */
+typedef struct {
+    PyObject_HEAD
+
+    path_t *path;
+} btreeiterator;
 
 
 /*
