@@ -885,9 +885,7 @@ python_btree_remove(PyObject *self, PyObject *args) {
     if (!PyArg_ParseTuple(args, "O", &value)) return NULL;
 
     rc = find_path_to_item(tree, value, &path, &found);
-    if (find_path_to_item(tree, value, &path, &found)) {
-        return NULL;
-    }
+    if (rc) return NULL;
 
     if (!found) {
         PyErr_SetString(PyExc_ValueError, "btree.remove(x): x not in btree");
