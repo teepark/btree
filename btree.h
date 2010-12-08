@@ -1,3 +1,10 @@
+#ifndef PYBTREE_H
+#define PYBTREE_H
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /*
  * leaf and branch nodes, and a generic node_t to which they are both castable
  */
@@ -75,3 +82,9 @@ typedef int (*itemvisitor)(
  */
 int pybtree_insert(btreeobject *, PyObject *);
 int pybtree_remove(btreeobject *, PyObject *);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif
