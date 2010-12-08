@@ -71,6 +71,7 @@ typedef int (*itemvisitor)(
 
 
 /*
- * function for btree insert
+ * C api functions
  */
 int pybtree_insert(btreeobject *, PyObject *);
+int pybtree_remove(btreeobject *, PyObject *);

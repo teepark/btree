@@ -870,32 +870,59 @@ pybtree_insert(btreeobject *tree, PyObject *item) {
 static PyObject *
 python_btree_remove(PyObject *self, PyObject *args) {
     btreeobject *tree = (btreeobject *)self;
-    PyObject *value;
+    PyObject *item;
     char found;
-    int rc;
     PYBTREE_STACK_ALLOC_PATH(tree);
 
-    if (!PyArg_ParseTuple(args, "O", &value)) return NULL;
+    if (!PyArg_ParseTuple(args, "O", &item)) return NULL;
 
-    rc = find_path_to_item(tree, value, &path, &found);
-    if (rc) return NULL;
+    if (find_path_to_item(tree, item, &path, &found))
+        return NULL;
 
     if (!found) {
         PyErr_SetString(PyExc_ValueError, "btree.remove(x): x not in btree");
         return NULL;
     }
 
-    Py_DECREF(path.lineage[path.depth]->values[path.indexes[path.depth]]);
-
-    if (path.depth < path.tree->depth) {
+    if (path.depth < path.tree->depth)
         branch_removal(&path);
-    }
-    else {
+    else
         leaf_removal(&path);
-    }
+
+    Py_DECREF(path.lineage[path.depth]->values[path.indexes[path.depth]]);
 
     Py_INCREF(Py_None);
     return Py_None;
+}
+
+/*
+ * C api function for btree removal
+ */
+int
+pybtree_remove(btreeobject *tree, PyObject *item) {
+    int rc;
+    char found;
+    PYBTREE_STACK_ALLOC_PATH(tree);
+
+    Py_INCREF(item);
+    rc = find_path_to_item(tree, item, &path, &found);
+    Py_DECREF(item);
+
+    if (rc) return -1;
+
+    if (!found) {
+        PyErr_SetString(PyExc_ValueError, "btree removal: item not in btree");
+        return -1;
+    }
+
+    if (path.depth < path.tree->depth)
+        branch_removal(&path);
+    else
+        leaf_removal(&path);
+
+    Py_DECREF(path.lineage[path.depth]->values[path.indexes[path.depth]]);
+
+    return 0;
 }
 
 
