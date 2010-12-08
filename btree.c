@@ -666,6 +666,11 @@ btreeobject_init(PyObject *self, PyObject *args, PyObject *kwargs) {
     tree->depth = 0;
     tree->root = allocate_node(0, tree->order);
 
+    if (tree->order < 2) {
+        PyErr_SetString(PyExc_ValueError, "btree order must be >1");
+        return -1;
+    }
+
     return 0;
 }
 
