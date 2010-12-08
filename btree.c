@@ -745,7 +745,6 @@ ensure_space(offsetstring *string, long length) {
     if (string->length - string->offset < length) {
         while (string->length - string->offset < length) string->length *= 2;
         string->data = (char *)realloc(string->data, string->length);
-        memset(string->data + string->offset, 0, string->length - string->offset);
         if (string->data == NULL) {
             PyErr_SetString(PyExc_MemoryError, "failed to reallocate");
             return ENOMEM;
@@ -760,7 +759,6 @@ repr_visit(node_t *node, char is_branch, int depth, void *data) {
     int i, j, rc;
     PyObject *reprd;
     char item_str[INITIAL_SIZE];
-    memset(item_str, 0, INITIAL_SIZE);
 
     if ((rc = ensure_space(string, depth * 2)))
         return rc;
