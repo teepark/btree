@@ -1016,6 +1016,7 @@ static PySequenceMethods btree_sequence_methods = {
 };
 
 static PyMemberDef btree_members[] = {
+    {"order", T_INT, sizeof(PyObject), READONLY, "no docs yet"},
     {"depth", T_INT, sizeof(PyObject) + sizeof(int), READONLY, "no docs yet"}
 };
 
