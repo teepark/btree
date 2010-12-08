@@ -798,6 +798,12 @@ static PyObject *
 python_btree_repr(PyObject *self) {
     btreeobject *tree = (btreeobject *)self;
     PyObject *result;
+    int rc;
+    if ((rc = Py_ReprEnter(self))) {
+        if (rc < 0) return NULL;
+        return PyString_FromString("<...>");
+    }
+
     offsetstring string = {malloc(INITIAL_SIZE), 0, INITIAL_SIZE};
 
     if (traverse_nodes(tree, 1, repr_visit, (void *)(&string)))
@@ -805,6 +811,7 @@ python_btree_repr(PyObject *self) {
     else
         result = PyString_FromStringAndSize(string.data, string.offset - 1);
 
+    Py_ReprLeave(self);
     free(string.data);
     return result;
 }
