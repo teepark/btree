@@ -1,4 +1,6 @@
 #include "Python.h"
+#include "structmember.h"
+
 #include "btree.h"
 
 #define BOTHER_WITH_GC 1
@@ -972,11 +974,44 @@ python_btreeiterator_next(btreeiterator *iter) {
 }
 
 
+/*
+ * python 'in' operator support
+ */
+static int
+python_btree_contains(PyObject *self, PyObject *item) {
+    btreeobject *tree = (btreeobject *)self;
+    char found;
+    PYBTREE_STACK_ALLOC_PATH(tree)
+
+    if (find_path_to_item(tree, item, &path, (char *)(&found)))
+        return -1;
+
+    return (int)found;
+}
+
+
 static PyMethodDef btree_methods[] = {
     {"insert", python_btree_insert, METH_VARARGS, "no docs yet"},
     {"remove", python_btree_remove, METH_VARARGS, "no docs yet"},
     {"as_list", python_btree_as_list, METH_NOARGS, "no docs yet"},
     {NULL, NULL, 0, NULL}
+};
+
+static PySequenceMethods btree_sequence_methods = {
+    0,                     /* sq_length */
+    0,                     /* sq_concat */
+    0,                     /* sq_repeat */
+    0,                     /* sq_item */
+    0,                     /* sq_slice */
+    0,                     /* sq_ass_item */
+    0,                     /* sq_ass_slice */
+    python_btree_contains, /* sq_contains */
+    0,                     /* sq_inplace_concat */
+    0                      /* sq_inplace_repeat */
+};
+
+static PyMemberDef btree_members[] = {
+    {"depth", T_INT, sizeof(PyObject) + sizeof(int), READONLY, "no docs yet"}
 };
 
 /*
@@ -995,7 +1030,7 @@ static PyTypeObject btreetype = {
     0,                                         /* tp_compare */
     (reprfunc)python_btree_repr,               /* tp_repr */
     0,                                         /* tp_as_number */
-    0,                                         /* tp_as_sequence */
+    &btree_sequence_methods,                   /* tp_as_sequence */
     0,                                         /* tp_as_mapping */
     0,                                         /* tp_hash */
     0,                                         /* tp_call */
@@ -1020,7 +1055,7 @@ static PyTypeObject btreetype = {
     python_btree_iter,                         /* tp_iter */
     0,                                         /* tp_iternext */
     btree_methods,                             /* tp_methods */
-    0,                                         /* tp_members */
+    btree_members,                             /* tp_members */
     0,                                         /* tp_getset */
     0,                                         /* tp_base */
     0,                                         /* tp_dict */
