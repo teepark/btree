@@ -1001,8 +1001,11 @@ python_btree_contains(PyObject *self, PyObject *item) {
 
 
 static PyMethodDef btree_methods[] = {
-    {"insert", python_btree_insert, METH_VARARGS, "no docs yet"},
-    {"remove", python_btree_remove, METH_VARARGS, "no docs yet"},
+    {"insert", python_btree_insert, METH_VARARGS,
+        "insert a comparable object into the btree"},
+    {"remove", python_btree_remove, METH_VARARGS,
+        "remove the object from the btree if found,\n\
+         otherwise raises ValueError"},
     {"as_list", python_btree_as_list, METH_NOARGS, "no docs yet"},
     {NULL, NULL, 0, NULL}
 };
@@ -1021,9 +1024,16 @@ static PySequenceMethods btree_sequence_methods = {
 };
 
 static PyMemberDef btree_members[] = {
-    {"order", T_INT, sizeof(PyObject), READONLY, "no docs yet"},
-    {"depth", T_INT, sizeof(PyObject) + sizeof(int), READONLY, "no docs yet"}
+    {"order", T_INT, sizeof(PyObject), READONLY,
+        "The tree's order as passed to the constructor."},
+    {"depth", T_INT, sizeof(PyObject) + sizeof(int), READONLY,
+        "The current depth of the tree (just a single leaf is a depth of 0)"}
 };
+
+PyDoc_STRVAR(btree_class_doc, "A n-ary tree container type for sorted data\n\
+    \n\
+    The constructor takes 1 argument, the tree's order. This is an\n\
+    integer that indicates the most data items a single node may hold.");
 
 /*
  * the full type definition for the python object
@@ -1052,12 +1062,12 @@ static PyTypeObject btreetype = {
     Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE | /* tp_flags */
 #if BOTHER_WITH_GC
         Py_TPFLAGS_HAVE_GC,
-    0,                                         /* tp_doc */
+    btree_class_doc,                           /* tp_doc */
     (traverseproc)btree_traverse,              /* tp_traverse */
     (inquiry)btree_clear,                      /* tp_clear */
 #else
         0,
-    0,                                         /* tp_doc */
+    btree_class_doc,                           /* tp_doc */
     0,                                         /* tp_traverse */
     0,                                         /* tp_clear */
 #endif
