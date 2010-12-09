@@ -884,12 +884,12 @@ python_btree_remove(PyObject *self, PyObject *args) {
         return NULL;
     }
 
+    Py_DECREF(path.lineage[path.depth]->values[path.indexes[path.depth]]);
+
     if (path.depth < path.tree->depth)
         branch_removal(&path);
     else
         leaf_removal(&path);
-
-    Py_DECREF(path.lineage[path.depth]->values[path.indexes[path.depth]]);
 
     Py_INCREF(Py_None);
     return Py_None;
@@ -915,12 +915,12 @@ pybtree_remove(btreeobject *tree, PyObject *item) {
         return -1;
     }
 
+    Py_DECREF(path.lineage[path.depth]->values[path.indexes[path.depth]]);
+
     if (path.depth < path.tree->depth)
         branch_removal(&path);
     else
         leaf_removal(&path);
-
-    Py_DECREF(path.lineage[path.depth]->values[path.indexes[path.depth]]);
 
     return 0;
 }
