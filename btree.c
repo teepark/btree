@@ -660,12 +660,15 @@ btreeobject_init(PyObject *self, PyObject *args, PyObject *kwargs) {
     PyObject *order;
     btreeobject *tree = (btreeobject *)self;
 
+    tree->flags = 0;
+
     if (!PyArg_ParseTupleAndKeywords(
                 args, kwargs, "O!", btree_init_args, &PyInt_Type, &order))
         return -1;
 
     tree->order = (int)PyInt_AsLong(order);
     tree->depth = 0;
+    tree->flags |= PYBTREE_FLAG_INITED;
     tree->root = allocate_node(0, tree->order);
 
     if (tree->order < 2) {
@@ -688,7 +691,8 @@ dealloc_visitor(node_t *node, char is_branch, int depth, void *data) {
 
 static void
 btree_dealloc(btreeobject *self) {
-    traverse_nodes(self, 0, dealloc_visitor, NULL);
+    if (self->flags & PYBTREE_FLAG_INITED)
+        traverse_nodes(self, 0, dealloc_visitor, NULL);
     self->ob_type->tp_free((PyObject *)self);
 }
 

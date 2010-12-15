@@ -31,10 +31,11 @@ typedef struct {
     PyObject_HEAD
     int order;
     int depth;
-    int length;
+    char flags;
     node_t *root;
-    leaf_t *beginning;
 } btreeobject;
+
+#define PYBTREE_FLAG_INITED 1
 
 
 /*
