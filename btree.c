@@ -597,6 +597,8 @@ next_item(path_t *path, PyObject **ptr) {
     int index = path->indexes[depth];
     node_t *node = path->lineage[depth];
 
+    if (!path->tree->root->filled) return 1;
+
     if (depth < path->tree->depth) {
         /*
          * in a branch
