@@ -5,6 +5,12 @@
 
 #define BOTHER_WITH_GC 1
 
+#define PRINTF(format_str, py_object) {                                \
+    PyObject *__printf_pyobj = PyObject_Repr((PyObject *)(py_object)); \
+    printf((format_str), PyString_AsString(__printf_pyobj));           \
+    Py_DECREF(__printf_pyobj);                                         \
+}
+
 
 /*
  * allocate space for a node
@@ -93,10 +99,10 @@ pass_right(char is_branch, node_t *source, node_t *target, int count,
     target->values[count - 1] = parent->values[sep_index];
 
     /* copy the first item to be moved into the parent */
-    parent->values[sep_index] = source->values[source->filled - 1];
+    parent->values[sep_index] = source->values[source->filled - count];
 
     /* copy the other items to be moved into the target */
-    memcpy(target->values, source->values - count,
+    memcpy(target->values, source->values + source->filled - count + 1,
             sizeof(PyObject *) * (count - 1));
 
     if (is_branch) {
@@ -108,7 +114,7 @@ pass_right(char is_branch, node_t *source, node_t *target, int count,
                 sizeof(node_t *) * (tgt->filled + 1));
 
         /* move over the children from source to target */
-        memcpy(tgt->children, src->children + src->filled,
+        memcpy(tgt->children, src->children + src->filled + 1 - count,
                 sizeof(node_t *) * count);
     }
 
@@ -409,8 +415,8 @@ branch_removal(path_t *path) {
 
 
 /*
- * find the leftmost index in a PyObject array into which a
- * value is insertable still preserving sorted order
+ * find the left- or right-most index in a PyObject array into
+ * which a value is insertable still preserving sorted order
  */
 static int
 bisect_left(PyObject **array, int array_length, PyObject *value) {
@@ -421,6 +427,22 @@ bisect_left(PyObject **array, int array_length, PyObject *value) {
     while (min < max) {
         mid = (max + min) / 2;
         if ((cmp = PyObject_RichCompareBool(value, array[mid], Py_GT)) < 0)
+            return cmp;
+        if (cmp) min = mid + 1;
+        else max = mid;
+    }
+    return min;
+}
+
+static int
+bisect_right(PyObject **array, int array_length, PyObject *value) {
+    int cmp,
+        min = 0,
+        max = array_length,
+        mid;
+    while (min < max) {
+        mid = (max + min) / 2;
+        if ((cmp = PyObject_RichCompareBool(value, array[mid], Py_GE)) < 0)
             return cmp;
         if (cmp) min = mid + 1;
         else max = mid;
@@ -508,6 +530,145 @@ find_path_to_item(
 
     path->depth = i;
     return 0;
+}
+
+
+/*
+ * splitting a btree by a separator value
+ */
+static int
+cut_node(node_t *node, PyObject *separator, int depth, int leaf_depth,
+        int order, char eq_goes_left, node_t **new_node) {
+    /*
+     * this function recurses down the tree doing destructure operations at
+     * every step *and* has failure cases, but it can still all be done safely.
+     *
+     * this is because it copies data to the newly created node on the way down
+     * the tree, but doesn't do any destructive operation on the original node
+     * until it comes back up, after the last possible failure case has gone by
+     */
+    int index, rc;
+    int (*bisector)(PyObject **, int, PyObject *);
+
+    bisector = eq_goes_left ? bisect_right : bisect_left;
+    if ((index = bisector(node->values, node->filled, separator)) < 0)
+        return index;
+
+    *new_node = allocate_node(depth < leaf_depth, order);
+
+    memcpy((*new_node)->values, node->values + index,
+            sizeof(PyObject *) * (node->filled - index));
+
+    if (depth < leaf_depth) {
+        memcpy(((branch_t *)(*new_node))->children + 1,
+                ((branch_t *)node)->children + index + 1,
+                sizeof(node_t *) * (node->filled - index));
+
+        if ((rc = cut_node(((branch_t *)node)->children[index],
+                        separator,
+                        depth + 1,
+                        leaf_depth,
+                        order,
+                        eq_goes_left,
+                        ((branch_t *)(*new_node))->children))) {
+            free_node(depth < leaf_depth, *new_node);
+            return rc;
+        }
+    }
+
+    (*new_node)->filled = node->filled - index;
+    node->filled = index;
+
+    return 0;
+}
+
+static int
+cut_tree(btreeobject *tree, PyObject *separator, char eq_goes_left,
+        node_t **new_root) {
+    return cut_node(tree->root, separator, 0, tree->depth, tree->order,
+            eq_goes_left, new_root);
+}
+
+
+/*
+ * repairing the damage along a freshly cut edge
+ */
+static void
+heal_right_edge(btreeobject *tree) {
+    int i, j, original_depth = tree->depth;
+    node_t *node, *next;
+
+    /* first pass, decrement the tree depth and free
+     * the root for every consecutive empty root */
+    node = tree->root;
+    for (i = 0; i < original_depth; ++i) {
+        next = ((branch_t *)node)->children[node->filled];
+        if (node->filled)
+            break;
+        else {
+            free_node(1, node);
+            tree->depth--;
+            tree->root = node = next;
+        }
+    }
+    original_depth = tree->depth;
+
+    /* second pass, grow any nodes that are too small along the right edge */
+    PYBTREE_STACK_ALLOC_PATH(tree);
+    for (i = 1; i <= tree->depth; ++i) {
+        if (tree->depth < original_depth) {
+            i--;
+            original_depth = tree->depth;
+        }
+
+        node = tree->root;
+        for (j = 0; j <= i; ++j) {
+            path.lineage[j] = node;
+            path.indexes[j] = node->filled;
+            if (j < i) node = ((branch_t *)node)->children[node->filled];
+        }
+        path.depth = i;
+
+        if (node->filled < (tree->order / 2))
+            grow_node(&path, (tree->order / 2) - node->filled);
+    }
+}
+
+static void
+heal_left_edge(btreeobject *tree) {
+    int i, original_depth = tree->depth;
+    node_t *node, *next;
+    PYBTREE_STACK_ALLOC_PATH(tree);
+
+    /* first pass -- decrement the tree depth and free
+     * the root for every consecutive empty root */
+    node = tree->root;
+    for (i = 0; i < original_depth; ++i) {
+        next = ((branch_t *)node)->children[0];
+        if (node->filled)
+            break;
+        else {
+            free_node(1, node);
+            tree->depth--;
+            tree->root = node = next;
+        }
+    }
+
+    /* second pass -- grow any nodes along
+     * the cut edge that are too small */
+    node = tree->root;
+    for (i = 0; i <= tree->depth; ++i) {
+        path.lineage[i] = node;
+        path.indexes[i] = 0;
+        path.depth = i;
+
+        if (i && (node->filled < (tree->order / 2)))
+            grow_node(&path, (tree->order / 2) - node->filled);
+
+        if (i < tree->depth)
+            node = ((branch_t *)node)->children[0];
+    }
+
 }
 
 
@@ -1014,12 +1175,56 @@ python_btree_contains(PyObject *self, PyObject *item) {
 }
 
 
+/*
+ * python split() method
+ */
+static PyTypeObject btreetype;
+
+static char *split_kwargs[] = {"separator", "eq_goes_left", NULL};
+
+static PyObject *
+python_btree_split(PyObject *self, PyObject *args, PyObject *kwargs) {
+    btreeobject *tree = (btreeobject *)self;
+    btreeobject *new_tree;
+    node_t *new_root;
+    PyObject *item;
+    PyObject *eq_goes_left = Py_True;
+    PyObject *result;
+
+    if (!PyArg_ParseTupleAndKeywords(
+                args, kwargs, "O|O", split_kwargs, &item, &eq_goes_left))
+        return NULL;
+
+    if (cut_tree(tree, item, PyObject_IsTrue(eq_goes_left), &new_root))
+        return NULL;
+
+    new_tree = PyObject_GC_New(btreeobject, &btreetype);
+    new_tree->root = new_root;
+    new_tree->order = tree->order;
+    new_tree->depth = tree->depth;
+    new_tree->flags = PYBTREE_FLAG_INITED;
+
+    heal_left_edge(new_tree);
+    heal_right_edge(tree);
+
+    result = PyTuple_New(2);
+    PyTuple_SET_ITEM(result, 0, (PyObject *)tree);
+    PyTuple_SET_ITEM(result, 1, (PyObject *)new_tree);
+
+    Py_INCREF(tree);
+
+    return result;
+}
+
+
 static PyMethodDef btree_methods[] = {
     {"insert", python_btree_insert, METH_VARARGS,
         "insert a comparable object into the btree"},
     {"remove", python_btree_remove, METH_VARARGS,
         "remove the object from the btree if found,\n\
          otherwise raises ValueError"},
+    {"split", (PyCFunction)python_btree_split, METH_VARARGS | METH_KEYWORDS,
+        "divide the tree into 2 by a separator value"},
     {NULL, NULL, 0, NULL}
 };
 
