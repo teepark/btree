@@ -636,9 +636,8 @@ heal_right_edge(btreeobject *tree) {
 
 static void
 heal_left_edge(btreeobject *tree) {
-    int i, original_depth = tree->depth;
+    int i, j, original_depth = tree->depth;
     node_t *node, *next;
-    PYBTREE_STACK_ALLOC_PATH(tree);
 
     /* first pass -- decrement the tree depth and free
      * the root for every consecutive empty root */
@@ -654,21 +653,25 @@ heal_left_edge(btreeobject *tree) {
         }
     }
 
-    /* second pass -- grow any nodes along
-     * the cut edge that are too small */
-    node = tree->root;
-    for (i = 0; i <= tree->depth; ++i) {
-        path.lineage[i] = node;
-        path.indexes[i] = 0;
+    /* second pass, grow any nodes that are too small along the right edge */
+    PYBTREE_STACK_ALLOC_PATH(tree);
+    for (i = 1; i <= tree->depth; ++i) {
+        if (tree->depth < original_depth) {
+            i--;
+            original_depth = tree->depth;
+        }
+
+        node = tree->root;
+        for (j = 0; j <= i; ++j) {
+            path.lineage[j] = node;
+            path.indexes[j] = 0;
+            if (j < i) node = ((branch_t *)node)->children[0];
+        }
         path.depth = i;
 
-        if (i && (node->filled < (tree->order / 2)))
+        if (node->filled < (tree->order / 2))
             grow_node(&path, (tree->order / 2) - node->filled);
-
-        if (i < tree->depth)
-            node = ((branch_t *)node)->children[0];
     }
-
 }
 
 
