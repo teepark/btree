@@ -676,6 +676,127 @@ heal_left_edge(btreeobject *tree) {
 
 
 /*
+ * loading a sorted list into a new btree
+ */
+static PyTypeObject btreetype;
+
+static int
+load_generation(PyObject **items, int item_count, node_t **children, int order,
+        char is_branch, node_t **nodes, PyObject **separators) {
+    int i, j, node_counter = 0, needed, children_offset;
+    node_t *node;
+    node_t *neighbor;
+
+    /*
+     * pull `order` items into a new node, then 1 item as a separator, repeat
+     */
+    node = allocate_node(is_branch, order);
+    for (i = 0; i < item_count; ++i) {
+        if (i % (order + 1) == order) {
+            /* at a separator value */
+            node->filled = order;
+            nodes[node_counter] = node;
+            separators[node_counter] = items[i];
+            node = allocate_node(is_branch, order);
+            node_counter++;
+        }
+        else {
+            /* still inside a node */
+            node->values[i % (order + 1)] = items[i];
+        }
+    }
+    node->filled = i % (order + 1);
+    nodes[node_counter] = node;
+
+    /*
+     * if the generation's final node didn't wind up with enough items,
+     * pass enough over from the penultimate node to make both legal
+     */
+    if (node_counter && node->filled < (order / 2)) {
+        /* get some items from the previous node to make everything legal */
+        needed = (order / 2) - node->filled;
+        neighbor = nodes[node_counter - 1];
+
+        /* make space for the items to be moved */
+        memmove(node->values + needed, node->values,
+                sizeof(PyObject *) * node->filled);
+
+        /* prepend the item from the separators */
+        node->values[needed - 1] = separators[node_counter - 1];
+
+        /* make the first item to be moved be the separator */
+        separators[node_counter - 1] = neighbor->values[
+            neighbor->filled - needed];
+
+        /* copy the other items to be moved */
+        memcpy(node->values, neighbor->values + neighbor->filled - needed + 1,
+                sizeof(PyObject *) * (needed - 1));
+
+        node->filled += needed;
+        neighbor->filled -= needed;
+    }
+
+    /*
+     * if a non-leaf generation, hand out the children to the new nodes
+     */
+    if (is_branch)
+        for (i = children_offset = 0; i <= node_counter; ++i) {
+            node = nodes[i];
+            for (j = 0; j <= node->filled; ++j)
+                ((branch_t *)node)->children[j] = children[children_offset++];
+        }
+
+    return node_counter + 1;
+}
+
+static btreeobject *
+bulkload(PyObject *item_list, int order) {
+    btreeobject *tree = PyObject_GC_New(btreeobject, &btreetype);
+    int i, count, depth = 0;
+    node_t *genX[(PyList_GET_SIZE(item_list) / order) + 1];
+    node_t *genY[(PyList_GET_SIZE(item_list) / order) + 1];
+    PyObject *separators[PyList_GET_SIZE(item_list)];
+
+    count = PyList_GET_SIZE(item_list);
+    for (i = 0; i < count;  ++i)
+        separators[i] = PyList_GET_ITEM(item_list, i);
+
+    /*
+     * `genX` and `genY` alternate as the previous and current generation.
+     *
+     * using the `separators` array in this way (as both a to-read argument and
+     * a to-write argument) looks dangerous, but the reading of `items` and the
+     * writing of `separators` are both done left-to-right and the reading
+     * outpaces the writing.
+     *
+     * we lose references to generations older than the previous one, but
+     * children pointers are also set up in load_generation, so they are still
+     * reachable.
+     */
+    count = load_generation(separators, count, NULL, order, 0, &(genX[0]),
+            separators);
+    while (count > 1) {
+        count = load_generation(separators, count - 1, &(genX[0]), order, 1,
+                &(genY[0]), separators);
+        depth++;
+
+        if (count <= 1) break;
+
+        count = load_generation(separators, count - 1, &(genY[0]), order, 1,
+                &(genX[0]), separators);
+        depth++;
+    }
+
+    tree->root = ((depth & 1) ? genY : genX)[0];
+    tree->flags = PYBTREE_FLAG_INITED;
+    tree->order = order;
+    tree->depth = depth;
+
+    return tree;
+}
+
+
+/*
  * a generalized node traverser
  */
 static int
@@ -834,8 +955,8 @@ btreeobject_init(PyObject *self, PyObject *args, PyObject *kwargs) {
 
     tree->order = (int)PyInt_AsLong(order);
     tree->depth = 0;
-    tree->flags |= PYBTREE_FLAG_INITED;
     tree->root = allocate_node(0, tree->order);
+    tree->flags |= PYBTREE_FLAG_INITED;
 
     if (tree->order < 2) {
         PyErr_SetString(PyExc_ValueError, "btree order must be >1");
@@ -1181,8 +1302,6 @@ python_btree_contains(PyObject *self, PyObject *item) {
 /*
  * python split() method
  */
-static PyTypeObject btreetype;
-
 static char *split_kwargs[] = {"separator", "eq_goes_left", NULL};
 
 static PyObject *
@@ -1220,6 +1339,21 @@ python_btree_split(PyObject *self, PyObject *args, PyObject *kwargs) {
 }
 
 
+/*
+ * python bulkload class method
+ */
+static PyObject *
+python_btree_bulkload(PyObject *klass, PyObject *args) {
+    PyObject *item_list, *order;
+
+    if (!PyArg_ParseTuple(args, "O!O!", &PyList_Type, &item_list,
+            &PyInt_Type, &order))
+        return NULL;
+
+    return (PyObject *)bulkload(item_list, (int)PyInt_AsLong(order));
+}
+
+
 static PyMethodDef btree_methods[] = {
     {"insert", python_btree_insert, METH_VARARGS,
         "insert a comparable object into the btree"},
@@ -1228,6 +1362,8 @@ static PyMethodDef btree_methods[] = {
          otherwise raises ValueError"},
     {"split", (PyCFunction)python_btree_split, METH_VARARGS | METH_KEYWORDS,
         "divide the tree into 2 by a separator value"},
+    {"bulkload", python_btree_bulkload, METH_VARARGS | METH_CLASS,
+        "create a btree from a pre-sorted list"},
     {NULL, NULL, 0, NULL}
 };
 
