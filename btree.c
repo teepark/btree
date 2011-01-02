@@ -1377,14 +1377,50 @@ python_btree_bulkload(PyObject *klass, PyObject *args) {
 
 static PyMethodDef btree_methods[] = {
     {"insert", python_btree_insert, METH_VARARGS,
-        "insert a comparable object into the btree"},
+        "\
+insert an object into the btree\n\
+\n\
+:param obj: the object to insert\n\
+\n\
+:returns: ``None``\n\
+"},
     {"remove", python_btree_remove, METH_VARARGS,
-        "remove the object from the btree if found,\n\
-         otherwise raises ValueError"},
+        "\
+remove an object from the btree if found by == comparison\n\
+\n\
+:param obj: the object to remove\n\
+\n\
+:raises: ``ValueError`` if the object is not in the btree\n\
+\n\
+:returns: ``None``\n\
+"},
     {"split", (PyCFunction)python_btree_split, METH_VARARGS | METH_KEYWORDS,
-        "divide the tree into 2 by a separator value"},
+        "\
+divide the btree into 2 btrees by a separator value\n\
+\n\
+:param separator:\n\
+    the split point -- objects greater than ``separator`` go into the left\n\
+    btree, objects less than go into the right btree\n\
+:param eq_goes_left:\n\
+    if ``False`` then objects == ``separator`` go into the right subtree,\n\
+    otherwise they go to the left. defaults to ``True``\n\
+:type eq_goes_left: bool\n\
+\n\
+:returns:\n\
+    a two-tuple of (``left_tree``, ``right_tree``). the ``left_tree`` is\n\
+    actually the original tree, which has now been modified.\n\
+"},
     {"bulkload", python_btree_bulkload, METH_VARARGS | METH_CLASS,
-        "create a btree from a pre-sorted list"},
+        "\
+create a btree from a pre-sorted list (classmethod)\n\
+\n\
+:param data: the list of items to load into the btree\n\
+:type data: list\n\
+:param order: the branching order for the btree\n\
+:type order: int\n\
+\n\
+:returns: a new loaded btree instance\n\
+"},
     {NULL, NULL, 0, NULL}
 };
 
@@ -1408,10 +1444,11 @@ static PyMemberDef btree_members[] = {
         "The current depth of the tree (just a single leaf is a depth of 0)"}
 };
 
-PyDoc_STRVAR(btree_class_doc, "A n-ary tree container type for sorted data\n\
-    \n\
-    The constructor takes 1 argument, the tree's order. This is an\n\
-    integer that indicates the most data items a single node may hold.");
+PyDoc_STRVAR(btree_class_doc, "\
+A n-ary tree container type for sorted data\n\
+\n\
+The constructor takes 1 argument, the tree's order. This is an\n\
+integer that indicates the most data items a single node may hold.");
 
 /*
  * the full type definition for the python object
