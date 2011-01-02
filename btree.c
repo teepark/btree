@@ -973,6 +973,9 @@ btreeobject_init(PyObject *self, PyObject *args, PyObject *kwargs) {
  */
 static int
 dealloc_visitor(node_t *node, char is_branch, int depth, void *data) {
+    int i;
+    for (i = 0; i < node->filled; ++i)
+        Py_DECREF(node->values[i]);
     free_node(is_branch, node);
     return 0;
 }
