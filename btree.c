@@ -751,16 +751,31 @@ static btreeobject *
 bulkload(PyObject *item_list, int order) {
     btreeobject *tree = PyObject_GC_New(btreeobject, &btreetype);
     PyObject_GC_Track(tree);
+    char result;
     int i, count, depth = 0;
     node_t *genX[(PyList_GET_SIZE(item_list) / order) + 1];
     node_t *genY[(PyList_GET_SIZE(item_list) / order) + 1];
-    PyObject *separators[PyList_GET_SIZE(item_list)];
+    PyObject *separators[PyList_GET_SIZE(item_list)], *prev, *item;
 
     count = PyList_GET_SIZE(item_list);
-    for (i = 0; i < count;  ++i) {
-        separators[i] = PyList_GET_ITEM(item_list, i);
-        Py_INCREF(separators[i]);
+
+    if (count) prev = separators[0] = PyList_GET_ITEM(item_list, 0);
+    for (i = 1; i < count; ++i) {
+        item = PyList_GET_ITEM(item_list, i);
+        result = PyObject_RichCompareBool(prev, item, Py_LT);
+        prev = separators[i] = item;
+
+        if (result <= 0) {
+            if (result == 0)
+                PyErr_SetString(PyExc_ValueError,
+                        "bulkloaded list must already be sorted");
+            PyObject_GC_UnTrack(tree);
+            return NULL;
+        }
     }
+
+    for (i = 0; i < count; ++i)
+        Py_INCREF(separators[i]);
 
     /*
      * `genX` and `genY` alternate as the previous and current generation.
@@ -1000,8 +1015,8 @@ typedef struct {
 static int traverse_visitor(node_t *node, char is_branch, int depth,
         void *payload) {
     int i;
-    visitproc visit = ((traverse_payload *)(payload))->visit;
-    void *arg = ((traverse_payload *)(payload))->arg;
+    visitproc visit = ((traverse_payload *)payload)->visit;
+    void *arg = ((traverse_payload *)payload)->arg;
     for (i = 0; i < node->filled; ++i) {
         Py_VISIT(node->values[i]);
     }
