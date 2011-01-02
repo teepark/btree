@@ -3,8 +3,6 @@
 
 #include "btree.h"
 
-#define BOTHER_WITH_GC 1
-
 #define PRINTF(format_str, py_object) {                                \
     PyObject *__printf_pyobj = PyObject_Repr((PyObject *)(py_object)); \
     printf((format_str), PyString_AsString(__printf_pyobj));           \
@@ -752,14 +750,17 @@ load_generation(PyObject **items, int item_count, node_t **children, int order,
 static btreeobject *
 bulkload(PyObject *item_list, int order) {
     btreeobject *tree = PyObject_GC_New(btreeobject, &btreetype);
+    PyObject_GC_Track(tree);
     int i, count, depth = 0;
     node_t *genX[(PyList_GET_SIZE(item_list) / order) + 1];
     node_t *genY[(PyList_GET_SIZE(item_list) / order) + 1];
     PyObject *separators[PyList_GET_SIZE(item_list)];
 
     count = PyList_GET_SIZE(item_list);
-    for (i = 0; i < count;  ++i)
+    for (i = 0; i < count;  ++i) {
         separators[i] = PyList_GET_ITEM(item_list, i);
+        Py_INCREF(separators[i]);
+    }
 
     /*
      * `genX` and `genY` alternate as the previous and current generation.
@@ -978,6 +979,7 @@ dealloc_visitor(node_t *node, char is_branch, int depth, void *data) {
 
 static void
 btree_dealloc(btreeobject *self) {
+    PyObject_GC_UnTrack(self);
     if (self->flags & PYBTREE_FLAG_INITED)
         traverse_nodes(self, 0, dealloc_visitor, NULL);
     self->ob_type->tp_free((PyObject *)self);
@@ -1321,6 +1323,7 @@ python_btree_split(PyObject *self, PyObject *args, PyObject *kwargs) {
         return NULL;
 
     new_tree = PyObject_GC_New(btreeobject, &btreetype);
+    PyObject_GC_Track(new_tree);
     new_tree->root = new_root;
     new_tree->order = tree->order;
     new_tree->depth = tree->depth;
@@ -1417,17 +1420,10 @@ static PyTypeObject btreetype = {
     0,                                         /* tp_setattro */
     0,                                         /* tp_as_buffer */
     Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE | /* tp_flags */
-#if BOTHER_WITH_GC
         Py_TPFLAGS_HAVE_GC,
     btree_class_doc,                           /* tp_doc */
     (traverseproc)btree_traverse,              /* tp_traverse */
     (inquiry)btree_clear,                      /* tp_clear */
-#else
-        0,
-    btree_class_doc,                           /* tp_doc */
-    0,                                         /* tp_traverse */
-    0,                                         /* tp_clear */
-#endif
     0,                                         /* tp_richcompare */
     0,                                         /* tp_weaklistoffset */
     python_btree_iter,                         /* tp_iter */
@@ -1443,11 +1439,7 @@ static PyTypeObject btreetype = {
     btreeobject_init,                          /* tp_init */
     PyType_GenericAlloc,                       /* tp_alloc */
     PyType_GenericNew,                         /* tp_new */
-#if BOTHER_WITH_GC
     PyObject_GC_Del,                           /* tp_free */
-#else
-    PyObject_Del,                              /* tp_free */
-#endif
 };
 
 
@@ -1495,11 +1487,7 @@ static PyTypeObject btreeiteratortype = {
     0,                                         /* tp_init */
     PyType_GenericAlloc,                       /* tp_alloc */
     PyType_GenericNew,                         /* tp_new */
-#if BOTHER_WITH_GC
     PyObject_GC_Del,                           /* tp_free */
-#else
-    PyObject_Del,                              /* tp_free */
-#endif
 };
 
 
