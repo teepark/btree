@@ -752,30 +752,61 @@ bulkload(PyObject *item_list, int order) {
     btreeobject *tree = PyObject_GC_New(btreeobject, &btreetype);
     PyObject_GC_Track(tree);
     char result;
-    int i, count, depth = 0;
-    node_t *genX[(PyList_GET_SIZE(item_list) / order) + 1];
-    node_t *genY[(PyList_GET_SIZE(item_list) / order) + 1];
-    PyObject *separators[PyList_GET_SIZE(item_list)], *prev, *item;
+    int i, j, depth = 0;
+    Py_ssize_t count;
 
-    count = PyList_GET_SIZE(item_list);
+    count = PyObject_Size(item_list);
+    if (count < 0) {
+        PyObject_GC_UnTrack(tree);
+        PyObject_GC_Del(tree);
+        return NULL;
+    }
 
-    if (count) prev = separators[0] = PyList_GET_ITEM(item_list, 0);
+    node_t *genX[(count / order) + 1];
+    node_t *genY[(count / order) + 1];
+    PyObject *separators[count], *prev, *iter;
+
+    iter = PyObject_GetIter(item_list);
+    if (iter == NULL) {
+        PyObject_GC_UnTrack(tree);
+        PyObject_GC_Del(tree);
+        return NULL;
+    }
+
+    if (count) {
+        prev = separators[0] = PyIter_Next(iter);
+        if (prev == NULL) {
+            Py_DECREF(iter);
+            PyObject_GC_UnTrack(tree);
+            PyObject_GC_Del(tree);
+            return NULL;
+        }
+    }
+
     for (i = 1; i < count; ++i) {
-        item = PyList_GET_ITEM(item_list, i);
-        result = PyObject_RichCompareBool(prev, item, Py_LT);
-        prev = separators[i] = item;
+        separators[i] = PyIter_Next(iter);
+        if (separators[i] == NULL) {
+            for (j = 0; j < i; ++j) Py_DECREF(separators[j]);
+            Py_DECREF(iter);
+            PyObject_GC_UnTrack(tree);
+            PyObject_GC_Del(tree);
+            return NULL;
+        }
+
+        result = PyObject_RichCompareBool(prev, separators[i], Py_LT);
+        prev = separators[i];
 
         if (result <= 0) {
             if (result == 0)
                 PyErr_SetString(PyExc_ValueError,
                         "bulkloaded list must already be sorted");
+            for (j = 0; j <= i; ++j) Py_DECREF(separators[j]);
+            Py_DECREF(iter);
             PyObject_GC_UnTrack(tree);
+            PyObject_GC_Del(tree);
             return NULL;
         }
     }
-
-    for (i = 0; i < count; ++i)
-        Py_INCREF(separators[i]);
 
     /*
      * `genX` and `genY` alternate as the previous and current generation.
@@ -789,17 +820,17 @@ bulkload(PyObject *item_list, int order) {
      * children pointers are also set up in load_generation, so they are still
      * reachable.
      */
-    count = load_generation(separators, count, NULL, order, 0, &(genX[0]),
-            separators);
+    count = (Py_ssize_t)load_generation(
+            separators, count, NULL, order, 0, &(genX[0]), separators);
     while (count > 1) {
-        count = load_generation(separators, count - 1, &(genX[0]), order, 1,
-                &(genY[0]), separators);
+        count = (Py_ssize_t)load_generation(separators, count - 1, &(genX[0]),
+                order, 1, &(genY[0]), separators);
         depth++;
 
         if (count <= 1) break;
 
-        count = load_generation(separators, count - 1, &(genY[0]), order, 1,
-                &(genX[0]), separators);
+        count = (Py_ssize_t)load_generation(separators, count - 1, &(genY[0]),
+                order, 1, &(genX[0]), separators);
         depth++;
     }
 
@@ -1367,8 +1398,7 @@ static PyObject *
 python_btree_bulkload(PyObject *klass, PyObject *args) {
     PyObject *item_list, *order;
 
-    if (!PyArg_ParseTuple(args, "O!O!", &PyList_Type, &item_list,
-            &PyInt_Type, &order))
+    if (!PyArg_ParseTuple(args, "OO!", &item_list, &PyInt_Type, &order))
         return NULL;
 
     return (PyObject *)bulkload(item_list, (int)PyInt_AsLong(order));
@@ -1402,8 +1432,8 @@ divide the btree into 2 btrees by a separator value\n\
     the split point -- objects greater than ``separator`` go into the left\n\
     btree, objects less than go into the right btree\n\
 :param eq_goes_left:\n\
-    if ``False`` then objects == ``separator`` go into the right subtree,\n\
-    otherwise they go to the left. defaults to ``True``\n\
+    if ``False`` then objects that are ``== separator`` go into the right\n\
+    subtree, otherwise they go to the left. defaults to ``True``\n\
 :type eq_goes_left: bool\n\
 \n\
 :returns:\n\
@@ -1414,8 +1444,8 @@ divide the btree into 2 btrees by a separator value\n\
         "\
 create a btree from a pre-sorted list (classmethod)\n\
 \n\
-:param data: the list of items to load into the btree\n\
-:type data: list\n\
+:param data: the items to load into the btree\n\
+:type data: iterable\n\
 :param order: the branching order for the btree\n\
 :type order: int\n\
 \n\

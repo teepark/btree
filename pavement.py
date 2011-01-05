@@ -60,3 +60,7 @@ def clean():
                 if exc.args[0] == errno.EACCES:
                     continue
                 raise
+
+@task
+def docs():
+    sh("find docs -name *.rst | xargs touch; cd docs; make html")
