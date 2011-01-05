@@ -1408,7 +1408,7 @@ python_btree_bulkload(PyObject *klass, PyObject *args) {
 static PyMethodDef btree_methods[] = {
     {"insert", python_btree_insert, METH_VARARGS,
         "\
-insert an object into the btree\n\
+insert an object into the sorted_btree\n\
 \n\
 :param obj: the object to insert\n\
 \n\
@@ -1416,21 +1416,21 @@ insert an object into the btree\n\
 "},
     {"remove", python_btree_remove, METH_VARARGS,
         "\
-remove an object from the btree if found by == comparison\n\
+remove an object from the sorted_btree if found by == comparison\n\
 \n\
 :param obj: the object to remove\n\
 \n\
-:raises: ``ValueError`` if the object is not in the btree\n\
+:raises: ``ValueError`` if the object is not in the sorted_btree\n\
 \n\
 :returns: ``None``\n\
 "},
     {"split", (PyCFunction)python_btree_split, METH_VARARGS | METH_KEYWORDS,
         "\
-divide the btree into 2 btrees by a separator value\n\
+divide the sorted_btree into 2 btrees by a separator value\n\
 \n\
 :param separator:\n\
     the split point -- objects greater than ``separator`` go into the left\n\
-    btree, objects less than go into the right btree\n\
+    sorted_btree, objects less than go into the right sorted_btree\n\
 :param eq_goes_left:\n\
     if ``False`` then objects that are ``== separator`` go into the right\n\
     subtree, otherwise they go to the left. defaults to ``True``\n\
@@ -1442,14 +1442,14 @@ divide the btree into 2 btrees by a separator value\n\
 "},
     {"bulkload", python_btree_bulkload, METH_VARARGS | METH_CLASS,
         "\
-create a btree from a pre-sorted list (classmethod)\n\
+create a sorted_btree from a pre-sorted list (classmethod)\n\
 \n\
-:param data: the items to load into the btree\n\
+:param data: the items to load into the sorted_btree\n\
 :type data: iterable\n\
-:param order: the branching order for the btree\n\
+:param order: the branching order for the sorted_btree\n\
 :type order: int\n\
 \n\
-:returns: a new loaded btree instance\n\
+:returns: a new loaded sorted_btree instance\n\
 "},
     {NULL, NULL, 0, NULL}
 };
@@ -1486,7 +1486,7 @@ integer that indicates the most data items a single node may hold.");
 static PyTypeObject btreetype = {
     PyObject_HEAD_INIT(&PyType_Type)
     0,
-    "btree.btree",
+    "btree.sorted_btree",
     sizeof(btreeobject),
     0,
     (destructor)btree_dealloc,                 /* tp_dealloc */
@@ -1534,7 +1534,7 @@ static PyTypeObject btreetype = {
 static PyTypeObject btreeiteratortype = {
     PyObject_HEAD_INIT(&PyType_Type)
     0,
-    "btree.btree_iterator",
+    "btree.sorted_btree_iterator",
     sizeof(btreeiterator),
     0,
     (destructor)btree_iterator_dealloc,        /* tp_dealloc */
@@ -1586,5 +1586,5 @@ initbtree(void) {
 
     if (PyType_Ready(&btreetype) < 0)
         return;
-    PyModule_AddObject(module, "btree", (PyObject *)(&btreetype));
+    PyModule_AddObject(module, "sorted_btree", (PyObject *)(&btreetype));
 }
