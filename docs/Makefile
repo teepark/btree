@@ -38,6 +38,10 @@ clean:
 
 html:
 	$(SPHINXBUILD) -b html $(ALLSPHINXOPTS) $(BUILDDIR)/html
+	@find build/html -type f | xargs sed -i 's/\<_sources\>/sources/g'
+	@find build/html -type f | xargs sed -i 's/\<_static\>/static/g'
+	@[ -d build/html/_sources ] && mv build/html/_sources build/html/sources || true
+	@[ -d build/html/_static ] && mv build/html/_static build/html/static || true
 	@echo
 	@echo "Build finished. The HTML pages are in $(BUILDDIR)/html."
 
