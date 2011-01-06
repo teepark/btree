@@ -90,7 +90,7 @@ typedef struct {
 
 
 /*
- * the PyObject of a btree iterator
+ * the PyObject of a sorted_btree iterator
  */
 typedef struct {
     PyObject_HEAD

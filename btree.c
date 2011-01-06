@@ -840,6 +840,8 @@ bulkload(PyObject *item_list, int order) {
         }
     }
 
+    Py_DECREF(iter);
+
     /*
      * `genX` and `genY` alternate as the previous and current generation.
      *
@@ -1311,7 +1313,7 @@ static PyObject *
 python_sorted_btree_iter(PyObject *self) {
     int i;
     sorted_btree_object *tree = (sorted_btree_object *)self;
-    sorted_btree_iterator *iter = (sorted_btree_iterator *)PyObject_New(
+    sorted_btree_iterator *iter = (sorted_btree_iterator *)PyObject_GC_New(
             sorted_btree_iterator, &sorted_btree_iterator_type);
     node_t *node = tree->root;
     path_t *path = malloc(sizeof(path_t));
@@ -1348,6 +1350,9 @@ sorted_btree_iterator_dealloc(sorted_btree_iterator *self) {
     free(self->path);
 
     Py_DECREF(self->path->tree);
+
+    PyObject_GC_UnTrack(self);
+    self->ob_type->tp_free((PyObject *)self);
 }
 
 
@@ -1588,7 +1593,7 @@ static PyTypeObject sorted_btree_iterator_type = {
     0,                                              /* tp_setattro */
     0,                                              /* tp_as_buffer */
     Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE |      /* tp_flags */
-        0,
+        Py_TPFLAGS_HAVE_GC,
     0,                                              /* tp_doc */
     0,                                              /* tp_traverse */
     0,                                              /* tp_clear */
