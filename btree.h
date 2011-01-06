@@ -33,7 +33,7 @@ typedef struct {
     int depth;
     char flags;
     node_t *root;
-} btreeobject;
+} sorted_btree_object;
 
 #define PYBTREE_FLAG_INITED 1
 
@@ -46,7 +46,7 @@ typedef struct {
     int depth;
     int *indexes;
     node_t **lineage;
-    btreeobject *tree;
+    sorted_btree_object *tree;
 } path_t;
 
 #define PYBTREE_STACK_ALLOC_PATH(tree)   \
@@ -65,7 +65,7 @@ typedef struct {
     PyObject_HEAD
 
     path_t *path;
-} btreeiterator;
+} sorted_btree_iterator;
 
 
 /*
@@ -81,8 +81,8 @@ typedef int (*itemvisitor)(
 /*
  * C api functions
  */
-int pybtree_insert(btreeobject *, PyObject *);
-int pybtree_remove(btreeobject *, PyObject *);
+int py_sorted_btree_insert(sorted_btree_object *, PyObject *);
+int py_sorted_btree_remove(sorted_btree_object *, PyObject *);
 
 #ifdef __cplusplus
 }

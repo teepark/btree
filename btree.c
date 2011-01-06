@@ -475,7 +475,7 @@ leaf_insert(PyObject *value, path_t *path) {
  * trace a path to the appropriate leaf for insertion
  */
 static int
-find_path_to_leaf(btreeobject *tree, PyObject *value, path_t *path) {
+find_path_to_leaf(sorted_btree_object *tree, PyObject *value, path_t *path) {
     int i, index;
     node_t *node = (node_t *)(tree->root);
 
@@ -499,8 +499,8 @@ find_path_to_leaf(btreeobject *tree, PyObject *value, path_t *path) {
  * trace a path to an item matching a given python value
  */
 static int
-find_path_to_item(
-        btreeobject *tree, PyObject *value, path_t *path, char *found) {
+find_path_to_item(sorted_btree_object *tree, PyObject *value, path_t *path,
+        char *found) {
     int i, index, cmp = 0;
     node_t *node = (node_t *)(tree->root);
 
@@ -581,7 +581,7 @@ cut_node(node_t *node, PyObject *separator, int depth, int leaf_depth,
 }
 
 static int
-cut_tree(btreeobject *tree, PyObject *separator, char eq_goes_left,
+cut_tree(sorted_btree_object *tree, PyObject *separator, char eq_goes_left,
         node_t **new_root) {
     return cut_node(tree->root, separator, 0, tree->depth, tree->order,
             eq_goes_left, new_root);
@@ -592,7 +592,7 @@ cut_tree(btreeobject *tree, PyObject *separator, char eq_goes_left,
  * repairing the damage along a freshly cut edge
  */
 static void
-heal_right_edge(btreeobject *tree) {
+heal_right_edge(sorted_btree_object *tree) {
     int i, j, original_depth = tree->depth;
     node_t *node, *next;
 
@@ -633,7 +633,7 @@ heal_right_edge(btreeobject *tree) {
 }
 
 static void
-heal_left_edge(btreeobject *tree) {
+heal_left_edge(sorted_btree_object *tree) {
     int i, j, original_depth = tree->depth;
     node_t *node, *next;
 
@@ -676,7 +676,7 @@ heal_left_edge(btreeobject *tree) {
 /*
  * loading a sorted list into a new btree
  */
-static PyTypeObject btreetype;
+static PyTypeObject sorted_btree_type;
 
 static int
 load_generation(PyObject **items, int item_count, node_t **children, int order,
@@ -747,9 +747,10 @@ load_generation(PyObject **items, int item_count, node_t **children, int order,
     return node_counter + 1;
 }
 
-static btreeobject *
+static sorted_btree_object *
 bulkload(PyObject *item_list, int order) {
-    btreeobject *tree = PyObject_GC_New(btreeobject, &btreetype);
+    sorted_btree_object *tree = PyObject_GC_New(
+            sorted_btree_object, &sorted_btree_type);
     PyObject_GC_Track(tree);
     char result;
     int i, j, depth = 0;
@@ -873,8 +874,10 @@ traverse_nodes_recursion(node_t *node, int depth, int leaf_depth, char down,
 }
 
 static int
-traverse_nodes(btreeobject *tree, char down, nodevisitor pred, void *data) {
-    return traverse_nodes_recursion(tree->root, 0, tree->depth, down, pred, data);
+traverse_nodes(
+        sorted_btree_object *tree, char down, nodevisitor pred, void *data) {
+    return traverse_nodes_recursion(
+            tree->root, 0, tree->depth, down, pred, data);
 }
 
 
@@ -914,7 +917,7 @@ traverse_items_recursion(node_t *node, int depth, int leaf_depth,
 }
 
 static int
-traverse_items(btreeobject *tree, itemvisitor pred, void *data) {
+traverse_items(sorted_btree_object *tree, itemvisitor pred, void *data) {
     return traverse_items_recursion(tree->root, 0, tree->depth, pred, data);
 }
 #endif
@@ -990,9 +993,9 @@ next_item(path_t *path, PyObject **ptr) {
 static char *btree_init_args[] = {"order", NULL};
 
 static int
-btreeobject_init(PyObject *self, PyObject *args, PyObject *kwargs) {
+sorted_btree_object_init(PyObject *self, PyObject *args, PyObject *kwargs) {
     PyObject *order;
-    btreeobject *tree = (btreeobject *)self;
+    sorted_btree_object *tree = (sorted_btree_object *)self;
 
     tree->flags = 0;
 
@@ -1027,7 +1030,7 @@ dealloc_visitor(node_t *node, char is_branch, int depth, void *data) {
 }
 
 static void
-btree_dealloc(btreeobject *self) {
+sorted_btree_dealloc(sorted_btree_object *self) {
     PyObject_GC_UnTrack(self);
     if (self->flags & PYBTREE_FLAG_INITED)
         traverse_nodes(self, 0, dealloc_visitor, NULL);
@@ -1055,7 +1058,7 @@ static int traverse_visitor(node_t *node, char is_branch, int depth,
 }
 
 static int
-btree_traverse(btreeobject *self, visitproc visit, void *arg) {
+sorted_btree_traverse(sorted_btree_object *self, visitproc visit, void *arg) {
     traverse_payload payload = {visit, arg};
     return traverse_nodes(self, 1, traverse_visitor, (void *)(&payload));
 }
@@ -1073,7 +1076,7 @@ clear_visitor(node_t *node, char is_branch, int depth, void *payload) {
 }
 
 static int
-btree_clear(btreeobject *self) {
+sorted_btree_clear(sorted_btree_object *self) {
     return traverse_nodes(self, 0, clear_visitor, NULL);
 }
 
@@ -1144,8 +1147,8 @@ repr_visit(node_t *node, char is_branch, int depth, void *data) {
 }
 
 static PyObject *
-python_btree_repr(PyObject *self) {
-    btreeobject *tree = (btreeobject *)self;
+python_sorted_btree_repr(PyObject *self) {
+    sorted_btree_object *tree = (sorted_btree_object *)self;
     PyObject *result;
     int rc;
     if ((rc = Py_ReprEnter(self))) {
@@ -1170,9 +1173,9 @@ python_btree_repr(PyObject *self) {
  * python insert method for btree objects
  */
 static PyObject *
-python_btree_insert(PyObject *self, PyObject *args) {
+python_sorted_btree_insert(PyObject *self, PyObject *args) {
     PyObject *item;
-    btreeobject *tree = (btreeobject *)self;
+    sorted_btree_object *tree = (sorted_btree_object *)self;
     PYBTREE_STACK_ALLOC_PATH(tree);
 
     if (!PyArg_ParseTuple(args, "O", &item)) return NULL;
@@ -1193,7 +1196,7 @@ python_btree_insert(PyObject *self, PyObject *args) {
  * C api function for btree insert
  */
 int
-pybtree_insert(btreeobject *tree, PyObject *item) {
+py_sorted_btree_insert(sorted_btree_object *tree, PyObject *item) {
     int rc;
     PYBTREE_STACK_ALLOC_PATH(tree);
 
@@ -1210,8 +1213,8 @@ pybtree_insert(btreeobject *tree, PyObject *item) {
  * python remove() method for deletion
  */
 static PyObject *
-python_btree_remove(PyObject *self, PyObject *args) {
-    btreeobject *tree = (btreeobject *)self;
+python_sorted_btree_remove(PyObject *self, PyObject *args) {
+    sorted_btree_object *tree = (sorted_btree_object *)self;
     PyObject *item;
     char found;
     PYBTREE_STACK_ALLOC_PATH(tree);
@@ -1241,7 +1244,7 @@ python_btree_remove(PyObject *self, PyObject *args) {
  * C api function for btree removal
  */
 int
-pybtree_remove(btreeobject *tree, PyObject *item) {
+py_sorted_btree_remove(sorted_btree_object *tree, PyObject *item) {
     int rc;
     char found;
     PYBTREE_STACK_ALLOC_PATH(tree);
@@ -1271,14 +1274,14 @@ pybtree_remove(btreeobject *tree, PyObject *item) {
 /*
  * python __iter__ implementation
  */
-static PyTypeObject btreeiteratortype;
+static PyTypeObject sorted_btree_iterator_type;
 
 static PyObject *
-python_btree_iter(PyObject *self) {
+python_sorted_btree_iter(PyObject *self) {
     int i;
-    btreeobject *tree = (btreeobject *)self;
-    btreeiterator *iter = (btreeiterator *)PyObject_New(
-            btreeiterator, &btreeiteratortype);
+    sorted_btree_object *tree = (sorted_btree_object *)self;
+    sorted_btree_iterator *iter = (sorted_btree_iterator *)PyObject_New(
+            sorted_btree_iterator, &sorted_btree_iterator_type);
     node_t *node = tree->root;
     path_t *path = malloc(sizeof(path_t));
 
@@ -1306,7 +1309,7 @@ python_btree_iter(PyObject *self) {
  * python btree_iterator deallocator
  */
 static void
-btree_iterator_dealloc(btreeiterator *self) {
+sorted_btree_iterator_dealloc(sorted_btree_iterator *self) {
     if (self->path == NULL) return;
 
     free(self->path->indexes);
@@ -1321,7 +1324,7 @@ btree_iterator_dealloc(btreeiterator *self) {
  * python btree_iterator.next implementation (the real iteration)
  */
 static PyObject *
-python_btreeiterator_next(btreeiterator *iter) {
+python_sorted_btreeiterator_next(sorted_btree_iterator *iter) {
     PyObject *item;
 
     if (next_item(iter->path, &item)) {
@@ -1338,8 +1341,8 @@ python_btreeiterator_next(btreeiterator *iter) {
  * python 'in' operator support
  */
 static int
-python_btree_contains(PyObject *self, PyObject *item) {
-    btreeobject *tree = (btreeobject *)self;
+python_sorted_btree_contains(PyObject *self, PyObject *item) {
+    sorted_btree_object *tree = (sorted_btree_object *)self;
     char found;
     PYBTREE_STACK_ALLOC_PATH(tree)
 
@@ -1356,9 +1359,9 @@ python_btree_contains(PyObject *self, PyObject *item) {
 static char *split_kwargs[] = {"separator", "eq_goes_left", NULL};
 
 static PyObject *
-python_btree_split(PyObject *self, PyObject *args, PyObject *kwargs) {
-    btreeobject *tree = (btreeobject *)self;
-    btreeobject *new_tree;
+python_sorted_btree_split(PyObject *self, PyObject *args, PyObject *kwargs) {
+    sorted_btree_object *tree = (sorted_btree_object *)self;
+    sorted_btree_object *new_tree;
     node_t *new_root;
     PyObject *item;
     PyObject *eq_goes_left = Py_True;
@@ -1371,7 +1374,7 @@ python_btree_split(PyObject *self, PyObject *args, PyObject *kwargs) {
     if (cut_tree(tree, item, PyObject_IsTrue(eq_goes_left), &new_root))
         return NULL;
 
-    new_tree = PyObject_GC_New(btreeobject, &btreetype);
+    new_tree = PyObject_GC_New(sorted_btree_object, &sorted_btree_type);
     PyObject_GC_Track(new_tree);
     new_tree->root = new_root;
     new_tree->order = tree->order;
@@ -1395,7 +1398,7 @@ python_btree_split(PyObject *self, PyObject *args, PyObject *kwargs) {
  * python bulkload class method
  */
 static PyObject *
-python_btree_bulkload(PyObject *klass, PyObject *args) {
+python_sorted_btree_bulkload(PyObject *klass, PyObject *args) {
     PyObject *item_list, *order;
 
     if (!PyArg_ParseTuple(args, "OO!", &item_list, &PyInt_Type, &order))
@@ -1405,8 +1408,8 @@ python_btree_bulkload(PyObject *klass, PyObject *args) {
 }
 
 
-static PyMethodDef btree_methods[] = {
-    {"insert", python_btree_insert, METH_VARARGS,
+static PyMethodDef sorted_btree_methods[] = {
+    {"insert", python_sorted_btree_insert, METH_VARARGS,
         "\
 insert an object into the sorted_btree\n\
 \n\
@@ -1414,7 +1417,7 @@ insert an object into the sorted_btree\n\
 \n\
 :returns: ``None``\n\
 "},
-    {"remove", python_btree_remove, METH_VARARGS,
+    {"remove", python_sorted_btree_remove, METH_VARARGS,
         "\
 remove an object from the sorted_btree if found by == comparison\n\
 \n\
@@ -1424,7 +1427,8 @@ remove an object from the sorted_btree if found by == comparison\n\
 \n\
 :returns: ``None``\n\
 "},
-    {"split", (PyCFunction)python_btree_split, METH_VARARGS | METH_KEYWORDS,
+    {"split", (PyCFunction)python_sorted_btree_split,
+        METH_VARARGS | METH_KEYWORDS,
         "\
 divide the sorted_btree into 2 btrees by a separator value\n\
 \n\
@@ -1440,7 +1444,7 @@ divide the sorted_btree into 2 btrees by a separator value\n\
     a two-tuple of (``left_tree``, ``right_tree``). the ``left_tree`` is\n\
     actually the original tree, which has now been modified.\n\
 "},
-    {"bulkload", python_btree_bulkload, METH_VARARGS | METH_CLASS,
+    {"bulkload", python_sorted_btree_bulkload, METH_VARARGS | METH_CLASS,
         "\
 create a sorted_btree from a pre-sorted list (classmethod)\n\
 \n\
@@ -1454,7 +1458,7 @@ create a sorted_btree from a pre-sorted list (classmethod)\n\
     {NULL, NULL, 0, NULL}
 };
 
-static PySequenceMethods btree_sequence_methods = {
+static PySequenceMethods sorted_btree_sequence_methods = {
     0,                     /* sq_length */
     0,                     /* sq_concat */
     0,                     /* sq_repeat */
@@ -1462,19 +1466,19 @@ static PySequenceMethods btree_sequence_methods = {
     0,                     /* sq_slice */
     0,                     /* sq_ass_item */
     0,                     /* sq_ass_slice */
-    python_btree_contains, /* sq_contains */
+    python_sorted_btree_contains, /* sq_contains */
     0,                     /* sq_inplace_concat */
     0                      /* sq_inplace_repeat */
 };
 
-static PyMemberDef btree_members[] = {
+static PyMemberDef sorted_btree_members[] = {
     {"order", T_INT, sizeof(PyObject), READONLY,
         "The tree's order as passed to the constructor."},
     {"depth", T_INT, sizeof(PyObject) + sizeof(int), READONLY,
         "The current depth of the tree (just a single leaf is a depth of 0)"}
 };
 
-PyDoc_STRVAR(btree_class_doc, "\
+PyDoc_STRVAR(sorted_btree_class_doc, "\
 A n-ary tree container type for sorted data\n\
 \n\
 The constructor takes 1 argument, the tree's order. This is an\n\
@@ -1483,20 +1487,20 @@ integer that indicates the most data items a single node may hold.");
 /*
  * the full type definition for the python object
  */
-static PyTypeObject btreetype = {
+static PyTypeObject sorted_btree_type = {
     PyObject_HEAD_INIT(&PyType_Type)
     0,
     "btree.sorted_btree",
-    sizeof(btreeobject),
+    sizeof(sorted_btree_object),
     0,
-    (destructor)btree_dealloc,                 /* tp_dealloc */
+    (destructor)sorted_btree_dealloc,          /* tp_dealloc */
     0,                                         /* tp_print */
     0,                                         /* tp_getattr */
     0,                                         /* tp_setattr */
     0,                                         /* tp_compare */
-    (reprfunc)python_btree_repr,               /* tp_repr */
+    (reprfunc)python_sorted_btree_repr,        /* tp_repr */
     0,                                         /* tp_as_number */
-    &btree_sequence_methods,                   /* tp_as_sequence */
+    &sorted_btree_sequence_methods,            /* tp_as_sequence */
     0,                                         /* tp_as_mapping */
     0,                                         /* tp_hash */
     0,                                         /* tp_call */
@@ -1506,22 +1510,22 @@ static PyTypeObject btreetype = {
     0,                                         /* tp_as_buffer */
     Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE | /* tp_flags */
         Py_TPFLAGS_HAVE_GC,
-    btree_class_doc,                           /* tp_doc */
-    (traverseproc)btree_traverse,              /* tp_traverse */
-    (inquiry)btree_clear,                      /* tp_clear */
+    sorted_btree_class_doc,                    /* tp_doc */
+    (traverseproc)sorted_btree_traverse,       /* tp_traverse */
+    (inquiry)sorted_btree_clear,               /* tp_clear */
     0,                                         /* tp_richcompare */
     0,                                         /* tp_weaklistoffset */
-    python_btree_iter,                         /* tp_iter */
+    python_sorted_btree_iter,                  /* tp_iter */
     0,                                         /* tp_iternext */
-    btree_methods,                             /* tp_methods */
-    btree_members,                             /* tp_members */
+    sorted_btree_methods,                      /* tp_methods */
+    sorted_btree_members,                      /* tp_members */
     0,                                         /* tp_getset */
     0,                                         /* tp_base */
     0,                                         /* tp_dict */
     0,                                         /* tp_descr_get */
     0,                                         /* tp_descr_set */
     0,                                         /* tp_dictoffset */
-    btreeobject_init,                          /* tp_init */
+    sorted_btree_object_init,                  /* tp_init */
     PyType_GenericAlloc,                       /* tp_alloc */
     PyType_GenericNew,                         /* tp_new */
     PyObject_GC_Del,                           /* tp_free */
@@ -1531,48 +1535,48 @@ static PyTypeObject btreetype = {
 /*
  * the btree iterator python object
  */
-static PyTypeObject btreeiteratortype = {
+static PyTypeObject sorted_btree_iterator_type = {
     PyObject_HEAD_INIT(&PyType_Type)
     0,
     "btree.sorted_btree_iterator",
-    sizeof(btreeiterator),
+    sizeof(sorted_btree_iterator),
     0,
-    (destructor)btree_iterator_dealloc,        /* tp_dealloc */
-    0,                                         /* tp_print */
-    0,                                         /* tp_getattr */
-    0,                                         /* tp_setattr */
-    0,                                         /* tp_compare */
-    0,                                         /* tp_repr */
-    0,                                         /* tp_as_number */
-    0,                                         /* tp_as_sequence */
-    0,                                         /* tp_as_mapping */
-    0,                                         /* tp_hash */
-    0,                                         /* tp_call */
-    0,                                         /* tp_str */
-    PyObject_GenericGetAttr,                   /* tp_getattro */
-    0,                                         /* tp_setattro */
-    0,                                         /* tp_as_buffer */
-    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE | /* tp_flags */
+    (destructor)sorted_btree_iterator_dealloc,      /* tp_dealloc */
+    0,                                              /* tp_print */
+    0,                                              /* tp_getattr */
+    0,                                              /* tp_setattr */
+    0,                                              /* tp_compare */
+    0,                                              /* tp_repr */
+    0,                                              /* tp_as_number */
+    0,                                              /* tp_as_sequence */
+    0,                                              /* tp_as_mapping */
+    0,                                              /* tp_hash */
+    0,                                              /* tp_call */
+    0,                                              /* tp_str */
+    PyObject_GenericGetAttr,                        /* tp_getattro */
+    0,                                              /* tp_setattro */
+    0,                                              /* tp_as_buffer */
+    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE |      /* tp_flags */
         0,
-    0,                                         /* tp_doc */
-    0,                                         /* tp_traverse */
-    0,                                         /* tp_clear */
-    0,                                         /* tp_richcompare */
-    0,                                         /* tp_weaklistoffset */
-    0,                                         /* tp_iter */
-    (iternextfunc)python_btreeiterator_next,   /* tp_iternext */
-    0,                                         /* tp_methods */
-    0,                                         /* tp_members */
-    0,                                         /* tp_getset */
-    0,                                         /* tp_base */
-    0,                                         /* tp_dict */
-    0,                                         /* tp_descr_get */
-    0,                                         /* tp_descr_set */
-    0,                                         /* tp_dictoffset */
-    0,                                         /* tp_init */
-    PyType_GenericAlloc,                       /* tp_alloc */
-    PyType_GenericNew,                         /* tp_new */
-    PyObject_GC_Del,                           /* tp_free */
+    0,                                              /* tp_doc */
+    0,                                              /* tp_traverse */
+    0,                                              /* tp_clear */
+    0,                                              /* tp_richcompare */
+    0,                                              /* tp_weaklistoffset */
+    0,                                              /* tp_iter */
+    (iternextfunc)python_sorted_btreeiterator_next, /* tp_iternext */
+    0,                                              /* tp_methods */
+    0,                                              /* tp_members */
+    0,                                              /* tp_getset */
+    0,                                              /* tp_base */
+    0,                                              /* tp_dict */
+    0,                                              /* tp_descr_get */
+    0,                                              /* tp_descr_set */
+    0,                                              /* tp_dictoffset */
+    0,                                              /* tp_init */
+    PyType_GenericAlloc,                            /* tp_alloc */
+    PyType_GenericNew,                              /* tp_new */
+    PyObject_GC_Del,                                /* tp_free */
 };
 
 
@@ -1582,9 +1586,10 @@ static PyTypeObject btreeiteratortype = {
 PyMODINIT_FUNC
 initbtree(void) {
     PyObject *module = Py_InitModule("btree", NULL);
-    Py_INCREF(&btreetype);
+    Py_INCREF(&sorted_btree_type);
 
-    if (PyType_Ready(&btreetype) < 0)
+    if (PyType_Ready(&sorted_btree_type) < 0)
         return;
-    PyModule_AddObject(module, "sorted_btree", (PyObject *)(&btreetype));
+    PyModule_AddObject(module, "sorted_btree",
+            (PyObject *)(&sorted_btree_type));
 }
