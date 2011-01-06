@@ -1339,7 +1339,7 @@ python_sorted_btree_iter(PyObject *self) {
 
 
 /*
- * python btree_iterator deallocator
+ * python sorted_btree_iterator deallocator
  */
 static void
 sorted_btree_iterator_dealloc(sorted_btree_iterator *self) {
@@ -1357,7 +1357,7 @@ sorted_btree_iterator_dealloc(sorted_btree_iterator *self) {
 
 
 /*
- * python btree_iterator.next implementation (the real iteration)
+ * python sorted_btree_iterator.next implementation (the real iteration)
  */
 static PyObject *
 python_sorted_btreeiterator_next(sorted_btree_iterator *iter) {
@@ -1466,7 +1466,7 @@ remove an object from the sorted_btree if found by == comparison\n\
     {"split", (PyCFunction)python_sorted_btree_split,
         METH_VARARGS | METH_KEYWORDS,
         "\
-divide the sorted_btree into 2 btrees by a separator value\n\
+divide the sorted_btree into 2 by a separator value\n\
 \n\
 :param separator:\n\
     the split point -- objects greater than ``separator`` go into the left\n\
@@ -1569,7 +1569,7 @@ static PyTypeObject sorted_btree_type = {
 
 
 /*
- * the btree iterator python object
+ * the sorted_btree iterator python object
  */
 static PyTypeObject sorted_btree_iterator_type = {
     PyObject_HEAD_INIT(&PyType_Type)
