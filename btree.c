@@ -784,19 +784,10 @@ bulkload(PyObject *item_list, int order) {
             sorted_btree_object, &sorted_btree_type);
     PyObject_GC_Track(tree);
     char result;
-    int i, j, depth = 0;
-    Py_ssize_t count;
+    int i, j, count = 0, sepsize = 64, depth = 0;
+    PyObject *iter, *prev;
+    PyObject **separators = malloc(sizeof(PyObject *) * sepsize), **seps_next;
 
-    count = PyObject_Size(item_list);
-    if (count < 0) {
-        PyObject_GC_UnTrack(tree);
-        PyObject_GC_Del(tree);
-        return NULL;
-    }
-
-    node_t *genX[(count / order) + 1];
-    node_t *genY[(count / order) + 1];
-    PyObject *separators[count], *prev, *iter;
 
     iter = PyObject_GetIter(item_list);
     if (iter == NULL) {
@@ -805,40 +796,47 @@ bulkload(PyObject *item_list, int order) {
         return NULL;
     }
 
-    if (count) {
-        prev = separators[0] = PyIter_Next(iter);
-        if (prev == NULL) {
-            Py_DECREF(iter);
-            PyObject_GC_UnTrack(tree);
-            PyObject_GC_Del(tree);
-            return NULL;
+    if ((prev = separators[0] = PyIter_Next(iter))) {
+        for (i = 1;; ++i) {
+            if (i >= sepsize) {
+                sepsize *= 2;
+
+                seps_next = realloc(separators, sizeof(PyObject *) * sepsize);
+                if (seps_next == NULL) {
+                    for (j = 0; j < i; ++j) Py_DECREF(separators[j]);
+                    free(separators);
+                    PyObject_GC_UnTrack(tree);
+                    PyObject_GC_Del(tree);
+                    PyErr_SetString(PyExc_MemoryError, "failed to realloc");
+                    return NULL;
+                }
+
+                separators = seps_next;
+            }
+
+            separators[i] = PyIter_Next(iter);
+            if (separators[i] == NULL) break;
+
+            result = PyObject_RichCompareBool(prev, separators[i], Py_LT);
+            if (result <= 0) {
+                if (result == 0)
+                    PyErr_SetString(PyExc_ValueError,
+                            "the bulkloaded list must already be sorted");
+                Py_DECREF(iter);
+                for (j = 0; j <= i; ++j) Py_DECREF(separators[j]);
+                free(separators);
+                PyObject_GC_UnTrack(tree);
+                PyObject_GC_Del(tree);
+                return NULL;
+            }
+
+            prev = separators[i];
         }
+
+        count = i;
     }
 
-    for (i = 1; i < count; ++i) {
-        separators[i] = PyIter_Next(iter);
-        if (separators[i] == NULL) {
-            for (j = 0; j < i; ++j) Py_DECREF(separators[j]);
-            Py_DECREF(iter);
-            PyObject_GC_UnTrack(tree);
-            PyObject_GC_Del(tree);
-            return NULL;
-        }
-
-        result = PyObject_RichCompareBool(prev, separators[i], Py_LT);
-        prev = separators[i];
-
-        if (result <= 0) {
-            if (result == 0)
-                PyErr_SetString(PyExc_ValueError,
-                        "bulkloaded list must already be sorted");
-            for (j = 0; j <= i; ++j) Py_DECREF(separators[j]);
-            Py_DECREF(iter);
-            PyObject_GC_UnTrack(tree);
-            PyObject_GC_Del(tree);
-            return NULL;
-        }
-    }
+    node_t *genX[(count / order) + 1], *genY[(count / order) + 1];
 
     Py_DECREF(iter);
 
@@ -867,6 +865,8 @@ bulkload(PyObject *item_list, int order) {
                 order, 1, &(genX[0]), separators);
         depth++;
     }
+
+    free(separators);
 
     tree->root = ((depth & 1) ? genY : genX)[0];
     tree->flags = PYBTREE_FLAG_INITED;
