@@ -44,7 +44,7 @@
 /*
  * allocate space for a node
  */
-static node_t*
+static node_t *
 allocate_node(char is_branch, int order) {
     node_t *node;
     if (is_branch) {
@@ -878,6 +878,44 @@ bulkload(PyObject *item_list, int order) {
 
 
 /*
+ * shallow copy of a sorted_btree object
+ */
+static node_t *
+copy_node(node_t *node, int depth, int leaf_depth, int order) {
+    int i;
+    node_t *result = allocate_node(depth < leaf_depth, order);
+
+    for (i = 0; i < node->filled; ++i) {
+        result->values[i] = node->values[i];
+        Py_INCREF(node->values[i]);
+    }
+    result->filled = node->filled;
+
+    if (depth < leaf_depth)
+        for (i = 0; i <= node->filled; ++i) {
+            ((branch_t *)result)->children[i] = copy_node(
+                ((branch_t *)node)->children[i], depth + 1, leaf_depth, order);
+        }
+
+    return result;
+}
+
+static sorted_btree_object *
+copy_tree(sorted_btree_object *tree) {
+    sorted_btree_object *result = PyObject_GC_New(
+            sorted_btree_object, &sorted_btree_type);
+    PyObject_GC_Track(result);
+    result->order = tree->order;
+    result->depth = tree->depth;
+    result->flags = 0;
+
+    result->root = copy_node(tree->root, 0, tree->depth, tree->order);
+    result->flags = PYBTREE_FLAG_INITED;
+    return result;
+}
+
+
+/*
  * a generalized node traverser
  */
 static int
@@ -1444,6 +1482,15 @@ python_sorted_btree_bulkload(PyObject *klass, PyObject *args) {
 }
 
 
+/*
+ * python copy method
+ */
+static PyObject *
+python_sorted_btree_copy(PyObject *self, PyObject *args) {
+    return (PyObject *)copy_tree((sorted_btree_object *)self);
+}
+
+
 static PyMethodDef sorted_btree_methods[] = {
     {"insert", python_sorted_btree_insert, METH_VARARGS,
         "\
@@ -1479,6 +1526,18 @@ divide the sorted_btree into 2 by a separator value\n\
 :returns:\n\
     a two-tuple of (``left_tree``, ``right_tree``). the ``left_tree`` is\n\
     actually the original tree, which has now been modified.\n\
+"},
+    {"copy", python_sorted_btree_copy, METH_NOARGS,
+        "\
+make a shallow copy of the btree\n\
+\n\
+:returns: a new btree with the same order, contents and structure\n\
+"},
+    {"__copy__", python_sorted_btree_copy, METH_NOARGS,
+        "\
+make a shallow copy of the btree\n\
+\n\
+:returns: a new btree with the same order, contents and structure\n\
 "},
     {"bulkload", python_sorted_btree_bulkload, METH_VARARGS | METH_CLASS,
         "\
