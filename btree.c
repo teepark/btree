@@ -544,7 +544,6 @@ find_path_to_item(sorted_btree_object *tree, PyObject *value, path_t *path,
         if ((index = bisect_left(node->values, node->filled, value)) < 0)
             return index;
 
-        /* FIXME: I'm doing an extra comparison at every depth level */
         if (index < node->filled && (cmp = PyObject_RichCompareBool(
                 node->values[index], value, Py_EQ)) < 0)
             return cmp;
