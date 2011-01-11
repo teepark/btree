@@ -506,16 +506,19 @@ leaf_insert(PyObject *value, path_t *path) {
  * trace a path to the appropriate leaf for insertion
  */
 static int
-find_path_to_leaf(sorted_btree_object *tree, PyObject *value, path_t *path) {
+find_path_to_leaf(sorted_btree_object *tree, PyObject *value, char first,
+        path_t *path) {
     int i, index;
     node_t *node = (node_t *)(tree->root);
+    int (*bisector)(PyObject **, int, PyObject *);
 
+    bisector = first ? bisect_left : bisect_right;
     path->tree = tree;
 
     for (i = 0; i <= tree->depth; ++i) {
         if (i) node = ((branch_t *)node)->children[index];
 
-        if ((index = bisect_left(node->values, node->filled, value)) < 0)
+        if ((index = bisector(node->values, node->filled, value)) < 0)
             return index;
 
         path->lineage[i] = node;
@@ -530,22 +533,24 @@ find_path_to_leaf(sorted_btree_object *tree, PyObject *value, path_t *path) {
  * trace a path to an item matching a given python value
  */
 static int
-find_path_to_item(sorted_btree_object *tree, PyObject *value, path_t *path,
-        char *found) {
+find_path_to_item(sorted_btree_object *tree, PyObject *value, char first,
+        char find, path_t *path, char *found) {
     int i, index, cmp = 0;
     node_t *node = (node_t *)(tree->root);
+    int (*bisector)(PyObject **, int, PyObject *);
 
-    *found = 0;
+    bisector = first ? bisect_left : bisect_right;
+    if (find) *found = 0;
     path->tree = tree;
 
     for (i = 0; i <= tree->depth; ++i) {
         if (i) node = ((branch_t *)node)->children[index];
 
-        if ((index = bisect_left(node->values, node->filled, value)) < 0)
+        if ((index = bisector(node->values, node->filled, value)) < 0)
             return index;
 
-        if (index < node->filled && (cmp = PyObject_RichCompareBool(
-                node->values[index], value, Py_EQ)) < 0)
+        if (find && index < node->filled && (cmp = PyObject_RichCompareBool(
+                node->values[index - (first ? 0 : 1)], value, Py_EQ)) < 0)
             return cmp;
 
         path->lineage[i] = node;
@@ -1251,7 +1256,7 @@ python_sorted_btree_insert(PyObject *self, PyObject *args) {
 
     if (!PyArg_ParseTuple(args, "O", &item)) return NULL;
 
-    if (find_path_to_leaf(tree, item, &path)) {
+    if (find_path_to_leaf(tree, item, 1, &path)) {
         return NULL;
     }
 
@@ -1271,7 +1276,7 @@ py_sorted_btree_insert(sorted_btree_object *tree, PyObject *item) {
     int rc;
     PYBTREE_STACK_ALLOC_PATH(tree);
 
-    rc = find_path_to_leaf(tree, item, &path);
+    rc = find_path_to_leaf(tree, item, 1, &path);
     if (rc) return rc;
 
     Py_INCREF(item);
@@ -1292,7 +1297,7 @@ python_sorted_btree_remove(PyObject *self, PyObject *args) {
 
     if (!PyArg_ParseTuple(args, "O", &item)) return NULL;
 
-    if (find_path_to_item(tree, item, &path, &found))
+    if (find_path_to_item(tree, item, 1, 1, &path, &found))
         return NULL;
 
     if (!found) {
@@ -1321,7 +1326,7 @@ py_sorted_btree_remove(sorted_btree_object *tree, PyObject *item) {
     PYBTREE_STACK_ALLOC_PATH(tree);
 
     Py_INCREF(item);
-    rc = find_path_to_item(tree, item, &path, &found);
+    rc = find_path_to_item(tree, item, 1, 1, &path, &found);
     Py_DECREF(item);
 
     if (rc) return -1;
@@ -1420,7 +1425,7 @@ python_sorted_btree_contains(PyObject *self, PyObject *item) {
     char found;
     PYBTREE_STACK_ALLOC_PATH(tree)
 
-    if (find_path_to_item(tree, item, &path, (char *)(&found)))
+    if (find_path_to_item(tree, item, 1, 1, &path, (char *)(&found)))
         return -1;
 
     return (int)found;
@@ -1491,6 +1496,75 @@ python_sorted_btree_copy(PyObject *self, PyObject *args) {
 }
 
 
+/*
+ * python 'after' method
+ */
+static PyObject *
+python_sorted_btree_after(PyObject *self, PyObject *item) {
+    PyObject *result;
+    sorted_btree_object *tree = (sorted_btree_object *)self;
+    node_t *node;
+    int index;
+    PYBTREE_STACK_ALLOC_PATH(tree);
+
+    if (find_path_to_leaf(tree, item, 0, &path))
+        return NULL;
+
+    node = path.lineage[path.depth];
+    index = path.indexes[path.depth];
+
+    while (index >= node->filled) {
+        if (--path.depth < 0) {
+            PyErr_SetString(PyExc_ValueError,
+                    "item comes at the end of the sorted_btree");
+            return NULL;
+        }
+
+        node = path.lineage[path.depth];
+        index = path.indexes[path.depth];
+    }
+
+    result = node->values[index];
+    Py_INCREF(result);
+    return result;
+}
+
+
+/*
+ * python 'before' method
+ */
+
+static PyObject *
+python_sorted_btree_before(PyObject *self, PyObject *item) {
+    PyObject *result;
+    sorted_btree_object *tree = (sorted_btree_object *)self;
+    node_t *node;
+    int index;
+    PYBTREE_STACK_ALLOC_PATH(tree);
+
+    if (find_path_to_leaf(tree, item, 1, &path))
+        return NULL;
+
+    node = path.lineage[path.depth];
+    index = path.indexes[path.depth];
+
+    while (index == 0) {
+        if (--path.depth < 0) {
+            PyErr_SetString(PyExc_ValueError,
+                    "item comes at the end of the sorted_btree");
+            return NULL;
+        }
+
+        node = path.lineage[path.depth];
+        index = path.indexes[path.depth];
+    }
+
+    result = node->values[index - 1];
+    Py_INCREF(result);
+    return result;
+}
+
+
 static PyMethodDef sorted_btree_methods[] = {
     {"insert", python_sorted_btree_insert, METH_VARARGS,
         "\
@@ -1538,6 +1612,36 @@ make a shallow copy of the btree\n\
 make a shallow copy of the btree\n\
 \n\
 :returns: a new btree with the same order, contents and structure\n\
+"},
+    {"after", python_sorted_btree_after, METH_O,
+        "\
+returns the item from the sorted_btree which would come next in sorted order\n\
+\n\
+:param item:\n\
+    the object to compare against items contained in the sorted_btree\n\
+\n\
+:raises:\n\
+    ``ValueError`` if the ``item`` argument would come after everything\n\
+    contained in the sorted_btree\n\
+\n\
+:returns:\n\
+    an object from the btree, the one that would appear next after the\n\
+    ``item`` argument in sorted order\n\
+"},
+    {"before", python_sorted_btree_before, METH_O,
+        "\
+returns the item from the sorted_btree before the argument in sorted order\n\
+\n\
+:param item:\n\
+    the object to compare against items contained in the sorted_btree\n\
+\n\
+:raises:\n\
+    ``ValueError`` if the ``item`` argument would come before everything\n\
+    contained in the sorted_btree\n\
+\n\
+:returns:\n\
+    the object from the btree which would appear before the ``item``\n\
+    argument in sorted order\n\
 "},
     {"bulkload", python_sorted_btree_bulkload, METH_VARARGS | METH_CLASS,
         "\
