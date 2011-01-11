@@ -54,6 +54,56 @@
 <dd><p>A n-ary tree container type for sorted data</p>
 <p>The constructor takes 1 argument, the tree&#8217;s order. This is an
 integer that indicates the most data items a single node may hold.</p>
+<dl class="attribute">
+<dt id="btree.sorted_btree.after">
+<tt class="descname">after</tt><a class="headerlink" href="#btree.sorted_btree.after" title="Permalink to this definition">¶</a></dt>
+<dd><p>returns the item from the sorted_btree which would come next in sorted order</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>item</strong> &#8211; the object to compare against items contained in the sorted_btree</li>
+</ul>
+</td>
+</tr>
+<tr class="field"><th class="field-name">Raises :</th><td class="field-body"><p class="first"><tt class="docutils literal"><span class="pre">ValueError</span></tt> if the <tt class="docutils literal"><span class="pre">item</span></tt> argument would come after everything
+contained in the sorted_btree</p>
+</td>
+</tr>
+<tr class="field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last">an object from the btree, the one that would appear next after the
+<tt class="docutils literal"><span class="pre">item</span></tt> argument in sorted order</p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="btree.sorted_btree.before">
+<tt class="descname">before</tt><a class="headerlink" href="#btree.sorted_btree.before" title="Permalink to this definition">¶</a></dt>
+<dd><p>returns the item from the sorted_btree before the argument in sorted order</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>item</strong> &#8211; the object to compare against items contained in the sorted_btree</li>
+</ul>
+</td>
+</tr>
+<tr class="field"><th class="field-name">Raises :</th><td class="field-body"><p class="first"><tt class="docutils literal"><span class="pre">ValueError</span></tt> if the <tt class="docutils literal"><span class="pre">item</span></tt> argument would come before everything
+contained in the sorted_btree</p>
+</td>
+</tr>
+<tr class="field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last">the object from the btree which would appear before the <tt class="docutils literal"><span class="pre">item</span></tt>
+argument in sorted order</p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
 <dl class="staticmethod">
 <dt id="btree.sorted_btree.bulkload">
 <em class="property">static </em><tt class="descname">bulkload</tt><big>(</big><big>)</big><a class="headerlink" href="#btree.sorted_btree.bulkload" title="Permalink to this definition">¶</a></dt>
@@ -70,6 +120,20 @@ integer that indicates the most data items a single node may hold.</p>
 </tr>
 <tr class="field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last">a new loaded sorted_btree instance</p>
 </td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="btree.sorted_btree.copy">
+<tt class="descname">copy</tt><a class="headerlink" href="#btree.sorted_btree.copy" title="Permalink to this definition">¶</a></dt>
+<dd><p>make a shallow copy of the btree</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field"><th class="field-name">Returns:</th><td class="field-body">a new btree with the same order, contents and structure</td>
 </tr>
 </tbody>
 </table>
@@ -133,7 +197,7 @@ integer that indicates the most data items a single node may hold.</p>
 <dl class="attribute">
 <dt id="btree.sorted_btree.split">
 <tt class="descname">split</tt><a class="headerlink" href="#btree.sorted_btree.split" title="Permalink to this definition">¶</a></dt>
-<dd><p>divide the sorted_btree into 2 btrees by a separator value</p>
+<dd><p>divide the sorted_btree into 2 by a separator value</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
