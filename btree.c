@@ -1433,6 +1433,15 @@ python_sorted_btree_contains(PyObject *self, PyObject *item) {
 
 
 /*
+ * python bool() support
+ */
+static int
+python_sorted_btree_nonzero(PyObject *self) {
+    return ((sorted_btree_object *)self)->root->filled ? 1 : 0;
+}
+
+
+/*
  * python split() method
  */
 static char *split_kwargs[] = {"separator", "eq_goes_left", NULL};
@@ -1658,16 +1667,53 @@ create a sorted_btree from a pre-sorted list (classmethod)\n\
 };
 
 static PySequenceMethods sorted_btree_sequence_methods = {
-    0,                     /* sq_length */
-    0,                     /* sq_concat */
-    0,                     /* sq_repeat */
-    0,                     /* sq_item */
-    0,                     /* sq_slice */
-    0,                     /* sq_ass_item */
-    0,                     /* sq_ass_slice */
+    0,                            /* sq_length */
+    0,                            /* sq_concat */
+    0,                            /* sq_repeat */
+    0,                            /* sq_item */
+    0,                            /* sq_slice */
+    0,                            /* sq_ass_item */
+    0,                            /* sq_ass_slice */
     python_sorted_btree_contains, /* sq_contains */
-    0,                     /* sq_inplace_concat */
-    0                      /* sq_inplace_repeat */
+    0,                            /* sq_inplace_concat */
+    0                             /* sq_inplace_repeat */
+};
+
+static PyNumberMethods sorted_btree_number_methods = {
+    0,                           /*nb_add*/
+    0,                           /*nb_subtract*/
+    0,                           /*nb_multiply*/
+    0,                           /*nb_divide*/
+    0,                           /*nb_remainder*/
+    0,                           /*nb_divmod*/
+    0,                           /*nb_power*/
+    0,                           /*nb_negative*/
+    0,                           /*nb_positive*/
+    0,                           /*nb_absolute*/
+    python_sorted_btree_nonzero, /*nb_nonzero*/
+    0,                           /*nb_invert*/
+    0,                           /*nb_lshift*/
+    0,                           /*nb_rshift*/
+    0,                           /*nb_and*/
+    0,                           /*nb_xor*/
+    0,                           /*nb_or*/
+    0,                           /*nb_coerce*/
+    0,                           /*nb_int*/
+    0,                           /*nb_long*/
+    0,                           /*nb_float*/
+    0,                           /*nb_oct*/
+    0,                           /*nb_hex*/
+    0,                           /*nb_inplace_add*/
+    0,                           /*nb_inplace_subtract*/
+    0,                           /*nb_inplace_multiply*/
+    0,                           /*nb_inplace_divide*/
+    0,                           /*nb_inplace_remainder*/
+    0,                           /*nb_inplace_power*/
+    0,                           /*nb_inplace_lshift*/
+    0,                           /*nb_inplace_rshift*/
+    0,                           /*nb_inplace_and*/
+    0,                           /*nb_inplace_xor*/
+    0,                           /*nb_inplace_or*/
 };
 
 static PyMemberDef sorted_btree_members[] = {
@@ -1698,7 +1744,7 @@ static PyTypeObject sorted_btree_type = {
     0,                                         /* tp_setattr */
     0,                                         /* tp_compare */
     (reprfunc)python_sorted_btree_repr,        /* tp_repr */
-    0,                                         /* tp_as_number */
+    &sorted_btree_number_methods,              /* tp_as_number */
     &sorted_btree_sequence_methods,            /* tp_as_sequence */
     0,                                         /* tp_as_mapping */
     0,                                         /* tp_hash */
