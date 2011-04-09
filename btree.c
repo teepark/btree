@@ -1037,6 +1037,10 @@ next_item(path_t *path, PyObject **ptr) {
      * in a leaf
      */
 
+    /* single leaf exit condition */
+    if (path->tree->depth == 0 && index >= path->tree->root->filled)
+        return 1;
+
     /* yield the current value */
     *ptr = node->values[index++];
 
