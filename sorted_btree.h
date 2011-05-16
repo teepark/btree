@@ -29,8 +29,8 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef PYBTREE_H
-#define PYBTREE_H
+#ifndef SORTEDBTREE_H
+#define SORTEDBTREE_H
 
 #ifdef __cplusplus
 extern "C" {
@@ -66,7 +66,12 @@ typedef struct {
     node_t *root;
 } sorted_btree_object;
 
-#define PYBTREE_FLAG_INITED 1
+/*
+ * the PyTypeObject of the btree class
+ */
+PyTypeObject sorted_btree_type;
+
+#define SORTBTREE_FLAG_INITED 1
 
 
 /*
@@ -80,12 +85,12 @@ typedef struct {
     sorted_btree_object *tree;
 } path_t;
 
-#define PYBTREE_STACK_ALLOC_PATH(tree)   \
-    path_t path;                         \
-    int _indexes[(tree)->depth + 1];     \
-    node_t *_lineage[(tree)->depth + 1]; \
-    path.tree = (tree);                  \
-    path.indexes = _indexes;             \
+#define PYBTREE_STACK_ALLOC_PATH(treeobj)   \
+    path_t path;                            \
+    int _indexes[(treeobj)->depth + 1];     \
+    node_t *_lineage[(treeobj)->depth + 1]; \
+    path.tree = (treeobj);                  \
+    path.indexes = _indexes;                \
     path.lineage = _lineage;
 
 
@@ -112,11 +117,11 @@ typedef int (*itemvisitor)(
 /*
  * C api functions
  */
-int py_sorted_btree_insert(sorted_btree_object *, PyObject *);
-int py_sorted_btree_remove(sorted_btree_object *, PyObject *);
+int py_sorted_btree_insert(PyObject *tree, PyObject *item);
+int py_sorted_btree_remove(PyObject *tree, PyObject *item);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif
+#endif /* SORTEDBTREE_H */

@@ -32,7 +32,7 @@
 #include "Python.h"
 #include "structmember.h"
 
-#include "btree.h"
+#include "sorted_btree.h"
 
 #define PRINTF(format_str, py_object) {                                \
     PyObject *__printf_pyobj = PyObject_Repr((PyObject *)(py_object)); \
@@ -712,8 +712,6 @@ heal_left_edge(sorted_btree_object *tree) {
 /*
  * loading a sorted list into a new btree
  */
-static PyTypeObject sorted_btree_type;
-
 static int
 load_generation(PyObject **items, int item_count, node_t **children, int order,
         char is_branch, node_t **nodes, PyObject **separators) {
@@ -874,7 +872,7 @@ bulkload(PyObject *item_list, int order) {
     free(separators);
 
     tree->root = ((depth & 1) ? genY : genX)[0];
-    tree->flags = PYBTREE_FLAG_INITED;
+    tree->flags = SORTBTREE_FLAG_INITED;
     tree->order = order;
     tree->depth = depth;
 
@@ -915,7 +913,7 @@ copy_tree(sorted_btree_object *tree) {
     result->flags = 0;
 
     result->root = copy_node(tree->root, 0, tree->depth, tree->order);
-    result->flags = PYBTREE_FLAG_INITED;
+    result->flags = SORTBTREE_FLAG_INITED;
     return result;
 }
 
@@ -1086,7 +1084,7 @@ sorted_btree_object_init(PyObject *self, PyObject *args, PyObject *kwargs) {
     tree->order = (int)PyInt_AsLong(order);
     tree->depth = 0;
     tree->root = allocate_node(0, tree->order);
-    tree->flags |= PYBTREE_FLAG_INITED;
+    tree->flags |= SORTBTREE_FLAG_INITED;
 
     if (tree->order < 2) {
         PyErr_SetString(PyExc_ValueError, "btree order must be >1");
@@ -1112,7 +1110,7 @@ dealloc_visitor(node_t *node, char is_branch, int depth, void *data) {
 static void
 sorted_btree_dealloc(sorted_btree_object *self) {
     PyObject_GC_UnTrack(self);
-    if (self->flags & PYBTREE_FLAG_INITED)
+    if (self->flags & SORTBTREE_FLAG_INITED)
         traverse_nodes(self, 0, dealloc_visitor, NULL);
     self->ob_type->tp_free((PyObject *)self);
 }
@@ -1276,11 +1274,17 @@ python_sorted_btree_insert(PyObject *self, PyObject *args) {
  * C api function for btree insert
  */
 int
-py_sorted_btree_insert(sorted_btree_object *tree, PyObject *item) {
+py_sorted_btree_insert(PyObject *tree, PyObject *item) {
     int rc;
-    PYBTREE_STACK_ALLOC_PATH(tree);
 
-    rc = find_path_to_leaf(tree, item, 1, &path);
+    if (Py_TYPE(tree) != &sorted_btree_type) {
+        PyErr_SetString(PyExc_TypeError, "sorted_btree object expected");
+        return -1;
+    }
+
+    PYBTREE_STACK_ALLOC_PATH((sorted_btree_object *)tree);
+
+    rc = find_path_to_leaf((sorted_btree_object *)tree, item, 1, &path);
     if (rc) return rc;
 
     Py_INCREF(item);
@@ -1324,16 +1328,23 @@ python_sorted_btree_remove(PyObject *self, PyObject *args) {
  * C api function for btree removal
  */
 int
-py_sorted_btree_remove(sorted_btree_object *tree, PyObject *item) {
+py_sorted_btree_remove(PyObject *tree, PyObject *item) {
     int rc;
     char found;
-    PYBTREE_STACK_ALLOC_PATH(tree);
+
+    if (Py_TYPE(tree) != &sorted_btree_type) {
+        PyErr_SetString(PyExc_TypeError, "sorted_btree object expeected");
+        return -1;
+    }
+
+    PYBTREE_STACK_ALLOC_PATH((sorted_btree_object *)tree);
 
     Py_INCREF(item);
-    rc = find_path_to_item(tree, item, 1, 1, &path, &found);
+    rc = find_path_to_item(
+            (sorted_btree_object *)tree, item, 1, 1, &path, &found);
     Py_DECREF(item);
 
-    if (rc) return -1;
+    if (rc) return rc;
 
     if (!found) {
         PyErr_SetString(PyExc_ValueError, "btree removal: item not in btree");
@@ -1471,7 +1482,7 @@ python_sorted_btree_split(PyObject *self, PyObject *args, PyObject *kwargs) {
     new_tree->root = new_root;
     new_tree->order = tree->order;
     new_tree->depth = tree->depth;
-    new_tree->flags = PYBTREE_FLAG_INITED;
+    new_tree->flags = SORTBTREE_FLAG_INITED;
 
     heal_left_edge(new_tree);
     heal_right_edge(tree);
@@ -1736,7 +1747,7 @@ integer that indicates the most data items a single node may hold.");
 /*
  * the full type definition for the python object
  */
-static PyTypeObject sorted_btree_type = {
+PyTypeObject sorted_btree_type = {
     PyObject_HEAD_INIT(&PyType_Type)
     0,
     "btree.sorted_btree",
@@ -1827,18 +1838,3 @@ static PyTypeObject sorted_btree_iterator_type = {
     PyType_GenericNew,                              /* tp_new */
     PyObject_GC_Del,                                /* tp_free */
 };
-
-
-/*
- * module initializer
- */
-PyMODINIT_FUNC
-initbtree(void) {
-    PyObject *module = Py_InitModule("btree", NULL);
-    Py_INCREF(&sorted_btree_type);
-
-    if (PyType_Ready(&sorted_btree_type) < 0)
-        return;
-    PyModule_AddObject(module, "sorted_btree",
-            (PyObject *)(&sorted_btree_type));
-}
