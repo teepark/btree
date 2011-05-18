@@ -33,6 +33,7 @@
 #include "structmember.h"
 
 #include "sorted_btree.h"
+#include "offsetstring.h"
 
 #define PRINTF(format_str, py_object) {                                \
     PyObject *__printf_pyobj = PyObject_Repr((PyObject *)(py_object)); \
@@ -1162,41 +1163,22 @@ sorted_btree_clear(sorted_btree_object *self) {
 /*
  * repr handling
  */
-#define INITIAL_SIZE 0x1000
-
-typedef struct offsetstring {
-    char *data;
-    int offset; /* amount full */
-    int length; /* total capacity */
-} offsetstring;
-
-static int
-ensure_space(offsetstring *string, long length) {
-    if (string->length - string->offset < length) {
-        while (string->length - string->offset < length) string->length *= 2;
-        string->data = (char *)realloc(string->data, string->length);
-        if (string->data == NULL) {
-            PyErr_SetString(PyExc_MemoryError, "failed to reallocate");
-            return ENOMEM;
-        }
-    }
-    return 0;
-}
 
 static int
 repr_visit(node_t *node, char is_branch, int depth, void *data) {
     offsetstring *string = (offsetstring *)data;
     int i, j, rc;
     PyObject *reprd;
-    char item_str[INITIAL_SIZE];
+    char item_str[OFFSETSTRING_INITIAL_SIZE];
 
-    if ((rc = ensure_space(string, depth * 2)))
+    offsetstring_resize(string, depth * 2, &rc);
+    if (rc) {
+        PyErr_SetString(PyExc_MemoryError, "failed realloc");
         return rc;
-
-    for (i = 0; i < depth; ++i) {
-        string->data[string->offset] = string->data[string->offset + 1] = ' ';
-        string->offset += 2;
     }
+
+    for (i = 0; i < depth; ++i)
+        offsetstring_write(string, "  ", 2, &rc);
 
     j = sprintf(item_str, "<%s filled=%d values=(",
             is_branch ? "BRANCH" : "LEAF",
@@ -1211,15 +1193,14 @@ repr_visit(node_t *node, char is_branch, int depth, void *data) {
 
     if (node->filled) j -= 2;
 
-    if ((rc = ensure_space(string, j + 3)))
+    offsetstring_resize(string, j + 4, &rc);
+    if (rc) {
+        PyErr_SetString(PyExc_MemoryError, "failed realloc");
         return rc;
+    }
 
-    memcpy(string->data + string->offset, item_str, j);
-    memcpy(string->data + string->offset + j, ")>\n", 3);
-    string->offset += j + 3;
-
-    if ((rc = ensure_space(string, 1)))
-        return rc;
+    offsetstring_write(string, item_str, j, &rc);
+    offsetstring_write(string, ")>\n", 3, &rc);
 
     return 0;
 }
@@ -1229,20 +1210,26 @@ python_sorted_btree_repr(PyObject *self) {
     sorted_btree_object *tree = (sorted_btree_object *)self;
     PyObject *result;
     int rc;
+    offsetstring *string;
     if ((rc = Py_ReprEnter(self))) {
         if (rc < 0) return NULL;
         return PyString_FromString("<...>");
     }
 
-    offsetstring string = {malloc(INITIAL_SIZE), 0, INITIAL_SIZE};
+    offsetstring_new(string, &rc);
+    if (rc) {
+        PyErr_SetString(PyExc_MemoryError, "failed malloc");
+        return NULL;
+    }
 
-    if (traverse_nodes(tree, 1, repr_visit, (void *)(&string)))
+    if (traverse_nodes(tree, 1, repr_visit, (void *)string))
         result = NULL;
     else
-        result = PyString_FromStringAndSize(string.data, string.offset - 1);
+        result = PyString_FromStringAndSize(
+                offsetstring_data(string), offsetstring_offset(string) - 1);
 
     Py_ReprLeave(self);
-    free(string.data);
+    offsetstring_del(string);
     return result;
 }
 
