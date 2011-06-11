@@ -36,6 +36,10 @@
 extern "C" {
 #endif
 
+#if PY_MAJOR_VERSION == 2 && PY_MINOR_VERSION <= 5
+    #define Py_TYPE(ob) (((PyObject *)(ob))->ob_type)
+#endif
+
 /*
  * leaf and branch nodes, and a generic node_t to which they are both castable
  */
