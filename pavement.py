@@ -17,7 +17,7 @@ setup(
     license="BSD",
     ext_modules=[Extension(
         'btree',
-        ['btreemodule.c', 'sorted_btree.c'],
+        ['src/btreemodule.c', 'src/sorted_btree.c', 'src/btree_common.c'],
         include_dirs=())],
     classifiers = [
         "Development Status :: 3 - Alpha",

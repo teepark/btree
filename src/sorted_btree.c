@@ -35,412 +35,58 @@
 #include "sorted_btree.h"
 #include "offsetstring.h"
 
-#define PRINTF(format_str, py_object) {                                \
-    PyObject *__printf_pyobj = PyObject_Repr((PyObject *)(py_object)); \
-    printf((format_str), PyString_AsString(__printf_pyobj));           \
-    Py_DECREF(__printf_pyobj);                                         \
-}
+
+/* forward declarations for the code in common_footer.h */
+static bt_node_t* allocate_node(char is_branch, int order);
+static void free_node(char is_branch, bt_node_t *node);
+static void node_sizechange(bt_path_t *path);
+static void node_pass_left(char is_branch, bt_node_t *source,
+        bt_node_t *target, int count, bt_branch_t *parent, int sep_index);
+static void node_pass_right(char is_branch, bt_node_t *source,
+        bt_node_t *target, int count, bt_branch_t *parent, int sep_index);
+
+#include "btree_common_footer.h"
 
 
 /*
- * allocate space for a node
+ * allocate/free a node
  */
-static node_t *
+static bt_node_t *
 allocate_node(char is_branch, int order) {
-    node_t *node;
+    bt_node_t *node;
     if (is_branch) {
-        node = malloc(sizeof(branch_t *));
-        ((branch_t *)node)->children = malloc(sizeof(node_t *) * (order + 2));
+        node = malloc(sizeof(btsort_branch_t *));
+        ((btsort_branch_t *)node)->children = malloc(
+            sizeof(bt_node_t *) * (order + 2));
     } else
-        node = malloc(sizeof(leaf_t *));
+        node = malloc(sizeof(btsort_leaf_t *));
     node->values = malloc(sizeof(PyObject *) * (order + 1));
     node->filled = 0;
     return node;
 }
 
-
-/*
- * deallocate a node
- */
 static void
-free_node(char is_branch, node_t *node) {
+free_node(char is_branch, bt_node_t *node) {
     free(node->values);
-    if (is_branch)
-        /* relax, this only frees the child pointers,
-         * not the child nodes themselves. */
-        free(((branch_t *)node)->children);
+    if (is_branch) free(((btsort_branch_t *)node)->children);
     free(node);
 }
 
 
 /*
- * pass value[s] (and for branch nodes, child[ren]) to the left neighbor
+ * callbacks for common_footer.h code
  */
 static void
-pass_left(char is_branch, node_t *source, node_t *target, int count,
-        branch_t *parent, int sep_index) {
-    if (!count) return;
+node_sizechange(bt_path_t *path) {};
 
-    /* append the parent's separator value to the target */
-    target->values[target->filled] = parent->values[sep_index];
-
-    /* use the last value to be moved from the source as the new separator */
-    parent->values[sep_index] = source->values[count - 1];
-
-    /* continue appending from the beginning of the source's values */
-    memcpy(target->values + target->filled + 1, source->values,
-            sizeof(PyObject *) * (count - 1));
-
-    /* move down the source's remaining values to the beginning */
-    memmove(source->values, source->values + count,
-            sizeof(PyObject *) * (source->filled - count));
-
-    if (is_branch) {
-        branch_t *src_b = (branch_t *)source;
-        branch_t *tgt_b = (branch_t *)target;
-
-        /* move over the same number of child nodes */
-        memcpy(tgt_b->children + tgt_b->filled + 1, src_b->children,
-                sizeof(node_t *) * count);
-
-        /* move over the source's remaining children */
-        memmove(src_b->children, src_b->children + count,
-                sizeof(node_t *) * (src_b->filled - count + 1));
-    }
-
-    target->filled += count;
-    source->filled -= count;
+static void node_pass_left(char is_branch, bt_node_t *source,
+        bt_node_t *target, int count, bt_branch_t *parent, int sep_index) {
+    btnode_pass_left(is_branch, source, target, count, parent, sep_index);
 }
 
-
-/*
- * pass value[s] (and for branch nodes, child[ren]) to the right neighbor
- */
-static void
-pass_right(char is_branch, node_t *source, node_t *target, int count,
-        branch_t *parent, int sep_index) {
-    if (!count) return;
-
-    /* make space in the target for the moved item(s) */
-    memmove(target->values + count, target->values,
-            sizeof(PyObject *) * target->filled);
-
-    /* prepend the parent's separator value to the target */
-    target->values[count - 1] = parent->values[sep_index];
-
-    /* copy the first item to be moved into the parent */
-    parent->values[sep_index] = source->values[source->filled - count];
-
-    /* copy the other items to be moved into the target */
-    memcpy(target->values, source->values + source->filled - count + 1,
-            sizeof(PyObject *) * (count - 1));
-
-    if (is_branch) {
-        branch_t *src = (branch_t *)source;
-        branch_t *tgt = (branch_t *)target;
-
-        /* make space for the same number of child nodes */
-        memmove(tgt->children + count, tgt->children,
-                sizeof(node_t *) * (tgt->filled + 1));
-
-        /* move over the children from source to target */
-        memcpy(tgt->children, src->children + src->filled + 1 - count,
-                sizeof(node_t *) * count);
-    }
-
-    target->filled += count;
-    source->filled -= count;
-}
-
-
-/*
- * shrink a node to preserve the btree invariants
- */
-static void
-shrink_node(path_t *path) {
-    int parent_index = -1;
-    branch_t *parent = NULL;
-    node_t *sibling;
-    node_t *node = path->lineage[path->depth];
-
-    int middle;
-    PyObject *median;
-
-    /* if we aren't the root, try passing an item to a neighbor */
-    if (path->depth) {
-        parent_index = path->indexes[path->depth - 1];
-        parent = (branch_t *)path->lineage[path->depth - 1];
-
-        /* try passing it left first */
-        if (parent_index) {
-            sibling = parent->children[parent_index - 1];
-            if (sibling->filled < path->tree->order) {
-                pass_left(path->depth < path->tree->depth, node, sibling, 1,
-                        parent, parent_index - 1);
-                return;
-            }
-        }
-
-        /* try passing it right */
-        if (parent_index < parent->filled) {
-            sibling = parent->children[parent_index + 1];
-
-            if (sibling->filled < path->tree->order) {
-                pass_right(path->depth < path->tree->depth, node, sibling, 1,
-                        parent, parent_index);
-                return;
-            }
-        }
-    }
-
-    /*
-     * fallback plan: split the current node into two
-     */
-
-    /* pull the median value, it's going up to the parent node */
-    middle = node->filled / 2;
-    median = node->values[middle];
-
-    /* put the second half of the node's data in a new sibling */
-    sibling = allocate_node(
-            path->depth < path->tree->depth, path->tree->order);
-    sibling->filled = node->filled - middle - 1;
-    memcpy(sibling->values, node->values + middle + 1,
-            sizeof(PyObject *) * sibling->filled);
-    if (path->depth < path->tree->depth)
-        memcpy(((branch_t *)sibling)->children,
-                ((branch_t *)node)->children + middle + 1,
-                sizeof(node_t *) * (node->filled - middle));
-
-    /* cut off the original node's data in the middle */
-    node->filled = middle;
-
-    /*
-     * push the median value up to the parent
-     */
-
-    if (!(path->depth)) {
-        /* if we were the root, we're going to need a parent now */
-        parent = (branch_t *)allocate_node(1, path->tree->order);
-
-        /* insert the siblings as children, and the median value */
-        parent->children[0] = node;
-        parent->children[1] = sibling;
-        parent->values[0] = median;
-        parent->filled = 1;
-        path->tree->root = (node_t *)parent;
-        path->tree->depth++;
-    } else {
-        /* if we need to, make space in the parent's arrays */
-        if (parent_index < parent->filled) {
-            memmove(parent->values + parent_index + 1,
-                    parent->values + parent_index,
-                    sizeof(PyObject *) * (parent->filled - parent_index));
-            memmove(parent->children + parent_index + 2,
-                    parent->children + parent_index + 1,
-                    sizeof(node_t *) * (parent->filled - parent_index));
-        }
-
-        parent->values[parent_index] = median;
-        parent->children[parent_index + 1] = sibling;
-        parent->filled += 1;
-    }
-
-    /* now if the parent node is overflowed then it too needs to shrink */
-    if (parent->filled > path->tree->order) {
-        path->depth--;
-        shrink_node(path);
-    }
-}
-
-
-/*
- * grow a node to preserve the btree invariants
- */
-static void
-grow_node(path_t *path, int count) {
-    branch_t *parent = (branch_t *)(path->lineage[path->depth - 1]);
-    int parent_index = path->indexes[path->depth - 1];
-    node_t *right, *left, *node;
-    right = left = NULL;
-    node = path->lineage[path->depth];
-
-    /* plan A: borrow from the neighbor to the right */
-    if (parent_index + 1 <= parent->filled) {
-        right = parent->children[parent_index + 1];
-        if (right->filled >= (path->tree->order / 2) + count) {
-            /* there is a right neighbor, and it has enough spare items */
-            pass_left(path->depth < path->tree->depth, right, node, count,
-                    parent, parent_index);
-            return;
-        }
-    }
-
-    /* plan B: borrow from the neighbor to the left */
-    if (parent_index) {
-        left = parent->children[parent_index - 1];
-        if (left->filled >= (path->tree->order / 2) + count) {
-            /* there is a left neighbor, and it has enough spare items */
-            pass_right(path->depth < path->tree->depth, left, node, count,
-                    parent, parent_index - 1);
-            return;
-        }
-    }
-
-    /* TODO: plan B-and-a-half: see if left and right neighbors have
-             enough items to spare combined, and pull some from each */
-
-    /* plan C: merge with the left neighbor */
-    if (left != NULL) {
-        /* presuming that `count` is the minimum number required to make `node`
-           a legal node, then any existing sibling that didn't have enough
-           extras to spare is small enough to legally combine with `node` */
-
-        /* append the separator from the parent to left */
-        left->values[left->filled] = parent->values[parent_index - 1];
-
-        /* copy over the items from node to left */
-        memcpy(left->values + left->filled + 1, node->values,
-                sizeof(PyObject *) * node->filled);
-
-        /* if applicable, copy the children over as well */
-        if (path->depth < path->tree->depth) {
-            memcpy(((branch_t *)left)->children + left->filled + 1,
-                    ((branch_t *)node)->children,
-                    sizeof(node_t *) * (node->filled + 1));
-        }
-
-        if (parent->filled > parent_index) {
-            /* remove the separator from the parent */
-            if (parent->filled > parent_index)
-            memmove(parent->values + parent_index - 1,
-                    parent->values + parent_index,
-                    sizeof(PyObject *) * (parent->filled - parent_index));
-
-            /* also remove the child pointer to node */
-            memmove(parent->children + parent_index,
-                    parent->children + parent_index + 1,
-                    sizeof(node_t *) * (parent->filled - parent_index));
-        }
-
-        parent->filled--;
-        left->filled += node->filled + 1;
-
-        /* finally, deallocate the dropped node */
-        free_node(path->depth < path->tree->depth, node);
-    } else {
-        /* plan D: merge with the right neighbor */
-
-        /* append the separator from the parent to node */
-        node->values[node->filled] = parent->values[parent_index];
-
-        /* copy the items from right to node */
-        memcpy(node->values + node->filled + 1, right->values,
-                sizeof(PyObject *) * (right->filled));
-
-        /* if applicable, copy the children as well */
-        if (path->depth < path->tree->depth) {
-            memcpy(((branch_t *)node)->children + node->filled + 1,
-                    ((branch_t *)right)->children,
-                    sizeof(node_t *) * (right->filled + 1));
-        }
-
-        if (parent->filled > parent_index) {
-            /* remove the separator from the parent */
-            memmove(parent->values + parent_index,
-                    parent->values + parent_index + 1,
-                    sizeof(PyObject *) * (parent->filled - parent_index - 1));
-
-            /* and remove the child pointer to right */
-            memmove(parent->children + parent_index + 1,
-                    parent->children + parent_index + 2,
-                    sizeof(node_t *) * (parent->filled - parent_index - 1));
-        }
-
-        parent->filled--;
-        node->filled += right->filled + 1;
-
-        /* finally, deallocate the dropped node */
-        free_node(path->depth < path->tree->depth, right);
-    }
-
-    if (path->depth > 1 && parent->filled < (path->tree->order / 2)) {
-        path->depth--;
-        grow_node(path, 1);
-    } else if (path->depth == 1 && !(parent->filled)) {
-        free_node(1, path->tree->root);
-        path->tree->root = (left == NULL ? node : left);
-        path->tree->depth--;
-    }
-}
-
-
-/*
- * remove an item from a leaf
- */
-static void
-leaf_removal(path_t *path) {
-    node_t *node = path->lineage[path->depth];
-    int index = path->indexes[path->depth];
-
-    /* move all the items after it down a space, covering it up */
-    if (index < node->filled - 1)
-        memmove(node->values + index, node->values + index + 1,
-                sizeof(PyObject *) * (node->filled - index - 1));
-    node->filled--;
-
-    /* if the node is now too small, borrow from or merge with a sibling */
-    if (path->depth && node->filled < (path->tree->order / 2)) {
-        grow_node(path, 1);
-    }
-}
-
-
-/*
- * remove an item from a branch
- */
-static void
-branch_removal(path_t *path) {
-    branch_t *node = (branch_t *)(path->lineage[path->depth]);
-    node_t *descendent;
-    int index = path->indexes[path->depth];
-    int i;
-
-    /* try promoting from the right subtree first,
-       but only if it won't result in a rebalance */
-    descendent = node->children[index + 1];
-    for (i = path->depth + 1; i < path->tree->depth; ++i) {
-        path->lineage[i] = descendent;
-        path->indexes[i] = 0;
-        descendent = ((branch_t *)descendent)->children[0];
-    }
-    path->lineage[path->tree->depth] = descendent;
-    path->indexes[path->tree->depth] = 0;
-
-    if (descendent->filled > (path->tree->order / 2)) {
-        node->values[index] = descendent->values[0];
-
-        path->depth = path->tree->depth;
-        leaf_removal(path);
-        return;
-    }
-
-    /* TODO: still borrow from the right if it will be able to borrow
-     *       from _it's_ right sibling */
-
-    /* fallback to promoting from the left subtree */
-    descendent = node->children[index];
-    for (i = path->depth + 1; i < path->tree->depth; ++i) {
-        path->lineage[i] = descendent;
-        path->indexes[i] = descendent->filled;
-        descendent = ((branch_t *)descendent)->children[descendent->filled];
-    }
-    path->lineage[path->tree->depth] = descendent;
-    path->indexes[path->tree->depth] = descendent->filled - 1;
-
-    node->values[index] = descendent->values[descendent->filled - 1];
-    path->depth = path->tree->depth;
-    leaf_removal(path);
+static void node_pass_right(char is_branch, bt_node_t *source,
+        bt_node_t *target, int count, bt_branch_t *parent, int sep_index) {
+    btnode_pass_right(is_branch, source, target, count, parent, sep_index);
 }
 
 
@@ -482,42 +128,20 @@ bisect_right(PyObject **array, int array_length, PyObject *value) {
 
 
 /*
- * given a path all the way to a leaf, insert a value into it
- */
-static void
-leaf_insert(PyObject *value, path_t *path) {
-    leaf_t *leaf = path->lineage[path->depth];
-    int index = path->indexes[path->depth];
-
-    /* put the value in place */
-    if (index < leaf->filled)
-        memmove(leaf->values + index + 1, leaf->values + index,
-                (leaf->filled - index) * sizeof(PyObject *));
-    memcpy(leaf->values + index, &value, sizeof(PyObject *));
-
-    leaf->filled++;
-
-    /* now if the node is overfilled, correct it */
-    if (leaf->filled > path->tree->order)
-        shrink_node(path);
-}
-
-
-/*
  * trace a path to the appropriate leaf for insertion
  */
 static int
-find_path_to_leaf(sorted_btree_object *tree, PyObject *value, char first,
-        path_t *path) {
+find_path_to_leaf(btsort_pyobject *tree, PyObject *value, char first,
+        bt_path_t *path) {
     int i, index;
-    node_t *node = (node_t *)(tree->root);
+    bt_node_t *node = (bt_node_t *)(tree->root);
     int (*bisector)(PyObject **, int, PyObject *);
 
     bisector = first ? bisect_left : bisect_right;
     path->tree = tree;
 
     for (i = 0; i <= tree->depth; ++i) {
-        if (i) node = ((branch_t *)node)->children[index];
+        if (i) node = ((bt_branch_t *)node)->children[index];
 
         if ((index = bisector(node->values, node->filled, value)) < 0)
             return index;
@@ -534,10 +158,10 @@ find_path_to_leaf(sorted_btree_object *tree, PyObject *value, char first,
  * trace a path to an item matching a given python value
  */
 static int
-find_path_to_item(sorted_btree_object *tree, PyObject *value, char first,
-        char find, path_t *path, char *found) {
+find_path_to_item(btsort_pyobject *tree, PyObject *value, char first,
+        char find, bt_path_t *path, char *found) {
     int i, index, cmp = 0;
-    node_t *node = (node_t *)(tree->root);
+    bt_node_t *node = (bt_node_t *)(tree->root);
     int (*bisector)(PyObject **, int, PyObject *);
 
     bisector = first ? bisect_left : bisect_right;
@@ -545,7 +169,7 @@ find_path_to_item(sorted_btree_object *tree, PyObject *value, char first,
     path->tree = tree;
 
     for (i = 0; i <= tree->depth; ++i) {
-        if (i) node = ((branch_t *)node)->children[index];
+        if (i) node = ((bt_branch_t *)node)->children[index];
 
         if ((index = bisector(node->values, node->filled, value)) < 0)
             return index;
@@ -572,8 +196,8 @@ find_path_to_item(sorted_btree_object *tree, PyObject *value, char first,
  * splitting a btree by a separator value
  */
 static int
-cut_node(node_t *node, PyObject *separator, int depth, int leaf_depth,
-        int order, char eq_goes_left, node_t **new_node) {
+cut_node(bt_node_t *node, PyObject *separator, int depth, int leaf_depth,
+        int order, char eq_goes_left, bt_node_t **new_node) {
     /*
      * this function recurses down the tree doing destructure operations at
      * every step *and* has failure cases, but it can still all be done safely.
@@ -595,17 +219,17 @@ cut_node(node_t *node, PyObject *separator, int depth, int leaf_depth,
             sizeof(PyObject *) * (node->filled - index));
 
     if (depth < leaf_depth) {
-        memcpy(((branch_t *)(*new_node))->children + 1,
-                ((branch_t *)node)->children + index + 1,
-                sizeof(node_t *) * (node->filled - index));
+        memcpy(((bt_branch_t *)(*new_node))->children + 1,
+                ((bt_branch_t *)node)->children + index + 1,
+                sizeof(bt_node_t *) * (node->filled - index));
 
-        if ((rc = cut_node(((branch_t *)node)->children[index],
+        if ((rc = cut_node(((bt_branch_t *)node)->children[index],
                         separator,
                         depth + 1,
                         leaf_depth,
                         order,
                         eq_goes_left,
-                        ((branch_t *)(*new_node))->children))) {
+                        ((bt_branch_t *)(*new_node))->children))) {
             free_node(depth < leaf_depth, *new_node);
             return rc;
         }
@@ -617,9 +241,10 @@ cut_node(node_t *node, PyObject *separator, int depth, int leaf_depth,
     return 0;
 }
 
+/* TODO: use a bt_path_t in cut_tree. shouldn't need cut_node at all */
 static int
-cut_tree(sorted_btree_object *tree, PyObject *separator, char eq_goes_left,
-        node_t **new_root) {
+cut_tree(btsort_pyobject *tree, PyObject *separator, char eq_goes_left,
+        bt_node_t **new_root) {
     return cut_node(tree->root, separator, 0, tree->depth, tree->order,
             eq_goes_left, new_root);
 }
@@ -629,15 +254,15 @@ cut_tree(sorted_btree_object *tree, PyObject *separator, char eq_goes_left,
  * repairing the damage along a freshly cut edge
  */
 static void
-heal_right_edge(sorted_btree_object *tree) {
+heal_right_edge(btsort_pyobject *tree) {
     int i, j, original_depth = tree->depth;
-    node_t *node, *next;
+    bt_node_t *node, *next;
 
     /* first pass, decrement the tree depth and free
      * the root for every consecutive empty root */
     node = tree->root;
     for (i = 0; i < original_depth; ++i) {
-        next = ((branch_t *)node)->children[node->filled];
+        next = ((bt_branch_t *)node)->children[node->filled];
         if (node->filled)
             break;
         else {
@@ -649,7 +274,7 @@ heal_right_edge(sorted_btree_object *tree) {
     original_depth = tree->depth;
 
     /* second pass, grow any nodes that are too small along the right edge */
-    PYBTREE_STACK_ALLOC_PATH(tree);
+    BT_STACK_ALLOC_PATH(tree);
     for (i = 1; i <= tree->depth; ++i) {
         if (tree->depth < original_depth) {
             i--;
@@ -660,7 +285,7 @@ heal_right_edge(sorted_btree_object *tree) {
         for (j = 0; j <= i; ++j) {
             path.lineage[j] = node;
             path.indexes[j] = node->filled;
-            if (j < i) node = ((branch_t *)node)->children[node->filled];
+            if (j < i) node = ((bt_branch_t *)node)->children[node->filled];
         }
         path.depth = i;
 
@@ -670,15 +295,15 @@ heal_right_edge(sorted_btree_object *tree) {
 }
 
 static void
-heal_left_edge(sorted_btree_object *tree) {
+heal_left_edge(btsort_pyobject *tree) {
     int i, j, original_depth = tree->depth;
-    node_t *node, *next;
+    bt_node_t *node, *next;
 
     /* first pass -- decrement the tree depth and free
      * the root for every consecutive empty root */
     node = tree->root;
     for (i = 0; i < original_depth; ++i) {
-        next = ((branch_t *)node)->children[0];
+        next = ((bt_branch_t *)node)->children[0];
         if (node->filled)
             break;
         else {
@@ -689,7 +314,7 @@ heal_left_edge(sorted_btree_object *tree) {
     }
 
     /* second pass, grow any nodes that are too small along the right edge */
-    PYBTREE_STACK_ALLOC_PATH(tree);
+    BT_STACK_ALLOC_PATH(tree);
     for (i = 1; i <= tree->depth; ++i) {
         if (tree->depth < original_depth) {
             i--;
@@ -700,7 +325,7 @@ heal_left_edge(sorted_btree_object *tree) {
         for (j = 0; j <= i; ++j) {
             path.lineage[j] = node;
             path.indexes[j] = 0;
-            if (j < i) node = ((branch_t *)node)->children[0];
+            if (j < i) node = ((bt_branch_t *)node)->children[0];
         }
         path.depth = i;
 
@@ -714,11 +339,11 @@ heal_left_edge(sorted_btree_object *tree) {
  * loading a sorted list into a new btree
  */
 static int
-load_generation(PyObject **items, int item_count, node_t **children, int order,
-        char is_branch, node_t **nodes, PyObject **separators) {
+load_generation(PyObject **items, int item_count, bt_node_t **children,
+        int order, char is_branch, bt_node_t **nodes, PyObject **separators) {
     int i, j, node_counter = 0, needed, children_offset;
-    node_t *node;
-    node_t *neighbor;
+    bt_node_t *node;
+    bt_node_t *neighbor;
 
     /*
      * pull `order` items into a new node, then 1 item as a separator, repeat
@@ -776,21 +401,22 @@ load_generation(PyObject **items, int item_count, node_t **children, int order,
         for (i = children_offset = 0; i <= node_counter; ++i) {
             node = nodes[i];
             for (j = 0; j <= node->filled; ++j)
-                ((branch_t *)node)->children[j] = children[children_offset++];
+                ((bt_branch_t *)node)->children[j] = children[
+                    children_offset++];
         }
 
     return node_counter + 1;
 }
 
-static sorted_btree_object *
+static btsort_pyobject *
 bulkload(PyObject *item_list, int order) {
-    sorted_btree_object *tree = PyObject_GC_New(
-            sorted_btree_object, &sorted_btree_type);
+    btsort_pyobject *tree = PyObject_GC_New(
+            btsort_pyobject, &btsort_pytypeobj);
     PyObject_GC_Track(tree);
     char result;
     int i, j, count = 0, sepsize = 64, depth = 0;
     PyObject *iter, *prev;
-    PyObject **separators = malloc(sizeof(PyObject *) * sepsize), **seps_next;
+    PyObject **seps_next, **separators = malloc(sizeof(PyObject *) * sepsize);
 
 
     iter = PyObject_GetIter(item_list);
@@ -840,7 +466,7 @@ bulkload(PyObject *item_list, int order) {
         count = i;
     }
 
-    node_t *genX[(count / order) + 1], *genY[(count / order) + 1];
+    bt_node_t *genX[(count / order) + 1], *genY[(count / order) + 1];
 
     Py_DECREF(iter);
 
@@ -873,7 +499,7 @@ bulkload(PyObject *item_list, int order) {
     free(separators);
 
     tree->root = ((depth & 1) ? genY : genX)[0];
-    tree->flags = SORTBTREE_FLAG_INITED;
+    tree->flags = BT_FLAG_INITED;
     tree->order = order;
     tree->depth = depth;
 
@@ -884,10 +510,10 @@ bulkload(PyObject *item_list, int order) {
 /*
  * shallow copy of a sorted_btree object
  */
-static node_t *
-copy_node(node_t *node, int depth, int leaf_depth, int order) {
+static bt_node_t *
+copy_node(bt_node_t *node, int depth, int leaf_depth, int order) {
     int i;
-    node_t *result = allocate_node(depth < leaf_depth, order);
+    bt_node_t *result = allocate_node(depth < leaf_depth, order);
 
     for (i = 0; i < node->filled; ++i) {
         result->values[i] = node->values[i];
@@ -897,24 +523,24 @@ copy_node(node_t *node, int depth, int leaf_depth, int order) {
 
     if (depth < leaf_depth)
         for (i = 0; i <= node->filled; ++i) {
-            ((branch_t *)result)->children[i] = copy_node(
-                ((branch_t *)node)->children[i], depth + 1, leaf_depth, order);
+            ((bt_branch_t *)result)->children[i] = copy_node(
+                ((bt_branch_t *)node)->children[i], depth + 1, leaf_depth, order);
         }
 
     return result;
 }
 
-static sorted_btree_object *
-copy_tree(sorted_btree_object *tree) {
-    sorted_btree_object *result = PyObject_GC_New(
-            sorted_btree_object, &sorted_btree_type);
+static btsort_pyobject *
+copy_tree(btsort_pyobject *tree) {
+    btsort_pyobject *result = PyObject_GC_New(
+            btsort_pyobject, &btsort_pytypeobj);
     PyObject_GC_Track(result);
     result->order = tree->order;
     result->depth = tree->depth;
     result->flags = 0;
 
     result->root = copy_node(tree->root, 0, tree->depth, tree->order);
-    result->flags = SORTBTREE_FLAG_INITED;
+    result->flags = BT_FLAG_INITED;
     return result;
 }
 
@@ -923,8 +549,8 @@ copy_tree(sorted_btree_object *tree) {
  * a generalized node traverser
  */
 static int
-traverse_nodes_recursion(node_t *node, int depth, int leaf_depth, char down,
-        nodevisitor pred, void *data) {
+traverse_nodes_recursion(bt_node_t *node, int depth, int leaf_depth, char down,
+        bt_node_visitor pred, void *data) {
     int i, rc;
 
     if (down && (rc = pred(node, depth != leaf_depth, depth, data)))
@@ -933,7 +559,7 @@ traverse_nodes_recursion(node_t *node, int depth, int leaf_depth, char down,
     if (depth < leaf_depth) {
         for (i = 0; i <= node->filled; ++i)
             if ((rc = traverse_nodes_recursion(
-                    ((branch_t *)node)->children[i],
+                    ((bt_branch_t *)node)->children[i],
                     depth + 1,
                     leaf_depth,
                     down,
@@ -950,7 +576,7 @@ traverse_nodes_recursion(node_t *node, int depth, int leaf_depth, char down,
 
 static int
 traverse_nodes(
-        sorted_btree_object *tree, char down, nodevisitor pred, void *data) {
+        btsort_pyobject *tree, char down, bt_node_visitor pred, void *data) {
     return traverse_nodes_recursion(
             tree->root, 0, tree->depth, down, pred, data);
 }
@@ -961,14 +587,14 @@ traverse_nodes(
  * generalized in-order python object traverser
  */
 static int
-traverse_items_recursion(node_t *node, int depth, int leaf_depth,
-        itemvisitor pred, void *data) {
+traverse_items_recursion(bt_node_t *node, int depth, int leaf_depth,
+        bt_item_visitor pred, void *data) {
     int i, rc;
 
     for (i = 0; i < node->filled; ++i) {
         if (depth != leaf_depth &&
                 (rc = traverse_items_recursion(
-                    ((branch_t *)node)->children[i],
+                    ((bt_branch_t *)node)->children[i],
                     depth + 1,
                     leaf_depth,
                     pred,
@@ -981,7 +607,7 @@ traverse_items_recursion(node_t *node, int depth, int leaf_depth,
 
     if (depth != leaf_depth &&
             (rc = traverse_items_recursion(
-                ((branch_t *)node)->children[i],
+                ((bt_branch_t *)node)->children[i],
                 depth + 1,
                 leaf_depth,
                 pred,
@@ -992,7 +618,7 @@ traverse_items_recursion(node_t *node, int depth, int leaf_depth,
 }
 
 static int
-traverse_items(sorted_btree_object *tree, itemvisitor pred, void *data) {
+traverse_items(btsort_pyobject *tree, bt_item_visitor pred, void *data) {
     return traverse_items_recursion(tree->root, 0, tree->depth, pred, data);
 }
 #endif
@@ -1002,10 +628,10 @@ traverse_items(sorted_btree_object *tree, itemvisitor pred, void *data) {
  * reentrant generalized in-order item traversal
  */
 static int
-next_item(path_t *path, PyObject **ptr) {
+next_item(bt_path_t *path, PyObject **ptr) {
     int depth = path->depth;
     int index = path->indexes[depth];
-    node_t *node = path->lineage[depth];
+    bt_node_t *node = path->lineage[depth];
 
     if (!path->tree->root->filled) return 1;
 
@@ -1025,7 +651,8 @@ next_item(path_t *path, PyObject **ptr) {
         path->indexes[depth]++;
         while (depth++ < path->tree->depth) {
             path->depth++;
-            path->lineage[depth] = node = ((branch_t *)node)->children[index];
+            node = ((bt_branch_t *)node)->children[index];
+            path->lineage[depth] = node;
             path->indexes[depth] = index = 0;
         }
 
@@ -1074,7 +701,7 @@ static char *btree_init_args[] = {"order", NULL};
 static int
 sorted_btree_object_init(PyObject *self, PyObject *args, PyObject *kwargs) {
     PyObject *order;
-    sorted_btree_object *tree = (sorted_btree_object *)self;
+    btsort_pyobject *tree = (btsort_pyobject *)self;
 
     tree->flags = 0;
 
@@ -1085,7 +712,7 @@ sorted_btree_object_init(PyObject *self, PyObject *args, PyObject *kwargs) {
     tree->order = (int)PyInt_AsLong(order);
     tree->depth = 0;
     tree->root = allocate_node(0, tree->order);
-    tree->flags |= SORTBTREE_FLAG_INITED;
+    tree->flags |= BT_FLAG_INITED;
 
     if (tree->order < 2) {
         PyErr_SetString(PyExc_ValueError, "btree order must be >1");
@@ -1100,7 +727,7 @@ sorted_btree_object_init(PyObject *self, PyObject *args, PyObject *kwargs) {
  * python btree instance deallocator
  */
 static int
-dealloc_visitor(node_t *node, char is_branch, int depth, void *data) {
+dealloc_visitor(bt_node_t *node, char is_branch, int depth, void *data) {
     int i;
     for (i = 0; i < node->filled; ++i)
         Py_DECREF(node->values[i]);
@@ -1109,9 +736,9 @@ dealloc_visitor(node_t *node, char is_branch, int depth, void *data) {
 }
 
 static void
-sorted_btree_dealloc(sorted_btree_object *self) {
+sorted_btree_dealloc(btsort_pyobject *self) {
     PyObject_GC_UnTrack(self);
-    if (self->flags & SORTBTREE_FLAG_INITED)
+    if (self->flags & BT_FLAG_INITED)
         traverse_nodes(self, 0, dealloc_visitor, NULL);
     self->ob_type->tp_free((PyObject *)self);
 }
@@ -1125,7 +752,7 @@ typedef struct {
     void *arg;
 } traverse_payload;
 
-static int traverse_visitor(node_t *node, char is_branch, int depth,
+static int traverse_visitor(bt_node_t *node, char is_branch, int depth,
         void *payload) {
     int i;
     visitproc visit = ((traverse_payload *)payload)->visit;
@@ -1137,7 +764,7 @@ static int traverse_visitor(node_t *node, char is_branch, int depth,
 }
 
 static int
-sorted_btree_traverse(sorted_btree_object *self, visitproc visit, void *arg) {
+sorted_btree_traverse(btsort_pyobject *self, visitproc visit, void *arg) {
     traverse_payload payload = {visit, arg};
     return traverse_nodes(self, 1, traverse_visitor, (void *)(&payload));
 }
@@ -1147,7 +774,7 @@ sorted_btree_traverse(sorted_btree_object *self, visitproc visit, void *arg) {
  * python btree GC clearer
  */
 static int
-clear_visitor(node_t *node, char is_branch, int depth, void *payload) {
+clear_visitor(bt_node_t *node, char is_branch, int depth, void *payload) {
     int i;
     for (i = 0; i < node->filled; ++i)
         Py_CLEAR(node->values[i]);
@@ -1155,7 +782,7 @@ clear_visitor(node_t *node, char is_branch, int depth, void *payload) {
 }
 
 static int
-sorted_btree_clear(sorted_btree_object *self) {
+sorted_btree_clear(btsort_pyobject *self) {
     return traverse_nodes(self, 0, clear_visitor, NULL);
 }
 
@@ -1165,7 +792,7 @@ sorted_btree_clear(sorted_btree_object *self) {
  */
 
 static int
-repr_visit(node_t *node, char is_branch, int depth, void *data) {
+repr_visit(bt_node_t *node, char is_branch, int depth, void *data) {
     offsetstring *string = (offsetstring *)data;
     int i, j, rc;
     PyObject *reprd;
@@ -1207,7 +834,7 @@ repr_visit(node_t *node, char is_branch, int depth, void *data) {
 
 static PyObject *
 python_sorted_btree_repr(PyObject *self) {
-    sorted_btree_object *tree = (sorted_btree_object *)self;
+    btsort_pyobject *tree = (btsort_pyobject *)self;
     PyObject *result;
     int rc;
     offsetstring *string;
@@ -1240,8 +867,8 @@ python_sorted_btree_repr(PyObject *self) {
 static PyObject *
 python_sorted_btree_insert(PyObject *self, PyObject *args) {
     PyObject *item;
-    sorted_btree_object *tree = (sorted_btree_object *)self;
-    PYBTREE_STACK_ALLOC_PATH(tree);
+    btsort_pyobject *tree = (btsort_pyobject *)self;
+    BT_STACK_ALLOC_PATH(tree);
 
     if (!PyArg_ParseTuple(args, "O", &item)) return NULL;
 
@@ -1264,14 +891,14 @@ int
 py_sorted_btree_insert(PyObject *tree, PyObject *item) {
     int rc;
 
-    if (Py_TYPE(tree) != &sorted_btree_type) {
+    if (Py_TYPE(tree) != &btsort_pytypeobj) {
         PyErr_SetString(PyExc_TypeError, "sorted_btree object expected");
         return -1;
     }
 
-    PYBTREE_STACK_ALLOC_PATH((sorted_btree_object *)tree);
+    BT_STACK_ALLOC_PATH((btsort_pyobject *)tree);
 
-    rc = find_path_to_leaf((sorted_btree_object *)tree, item, 1, &path);
+    rc = find_path_to_leaf((btsort_pyobject *)tree, item, 1, &path);
     if (rc) return rc;
 
     Py_INCREF(item);
@@ -1285,10 +912,10 @@ py_sorted_btree_insert(PyObject *tree, PyObject *item) {
  */
 static PyObject *
 python_sorted_btree_remove(PyObject *self, PyObject *args) {
-    sorted_btree_object *tree = (sorted_btree_object *)self;
+    btsort_pyobject *tree = (btsort_pyobject *)self;
     PyObject *item;
     char found;
-    PYBTREE_STACK_ALLOC_PATH(tree);
+    BT_STACK_ALLOC_PATH(tree);
 
     if (!PyArg_ParseTuple(args, "O", &item)) return NULL;
 
@@ -1319,16 +946,16 @@ py_sorted_btree_remove(PyObject *tree, PyObject *item) {
     int rc;
     char found;
 
-    if (Py_TYPE(tree) != &sorted_btree_type) {
+    if (Py_TYPE(tree) != &btsort_pytypeobj) {
         PyErr_SetString(PyExc_TypeError, "sorted_btree object expeected");
         return -1;
     }
 
-    PYBTREE_STACK_ALLOC_PATH((sorted_btree_object *)tree);
+    BT_STACK_ALLOC_PATH((btsort_pyobject *)tree);
 
     Py_INCREF(item);
     rc = find_path_to_item(
-            (sorted_btree_object *)tree, item, 1, 1, &path, &found);
+            (btsort_pyobject *)tree, item, 1, 1, &path, &found);
     Py_DECREF(item);
 
     if (rc) return rc;
@@ -1357,22 +984,22 @@ static PyTypeObject sorted_btree_iterator_type;
 static PyObject *
 python_sorted_btree_iter(PyObject *self) {
     int i;
-    sorted_btree_object *tree = (sorted_btree_object *)self;
-    sorted_btree_iterator *iter = (sorted_btree_iterator *)PyObject_GC_New(
-            sorted_btree_iterator, &sorted_btree_iterator_type);
-    node_t *node = tree->root;
-    path_t *path = malloc(sizeof(path_t));
+    btsort_pyobject *tree = (btsort_pyobject *)self;
+    btsort_iter_pyobject *iter = (btsort_iter_pyobject *)PyObject_GC_New(
+            btsort_iter_pyobject, &sorted_btree_iterator_type);
+    bt_node_t *node = tree->root;
+    bt_path_t *path = malloc(sizeof(bt_path_t));
 
     path->depth = tree->depth;
     path->indexes = malloc(sizeof(int *) * tree->depth + 1);
-    path->lineage = malloc(sizeof(node_t *) * tree->depth + 1);
+    path->lineage = malloc(sizeof(bt_node_t *) * tree->depth + 1);
     path->tree = tree;
     iter->path = path;
 
     for (i = 0; i < tree->depth; ++i) {
         path->indexes[i] = 0;
         path->lineage[i] = node;
-        node = ((branch_t *)node)->children[0];
+        node = ((bt_branch_t *)node)->children[0];
     }
     path->indexes[tree->depth] = 0;
     path->lineage[tree->depth] = node;
@@ -1384,10 +1011,10 @@ python_sorted_btree_iter(PyObject *self) {
 
 
 /*
- * python sorted_btree_iterator deallocator
+ * python btsort_iter_pyobject deallocator
  */
 static void
-sorted_btree_iterator_dealloc(sorted_btree_iterator *self) {
+sorted_btree_iterator_dealloc(btsort_iter_pyobject *self) {
     if (self->path == NULL) return;
 
     free(self->path->indexes);
@@ -1402,10 +1029,10 @@ sorted_btree_iterator_dealloc(sorted_btree_iterator *self) {
 
 
 /*
- * python sorted_btree_iterator.next implementation (the real iteration)
+ * python btsort_iter_pyobject.next implementation (the real iteration)
  */
 static PyObject *
-python_sorted_btreeiterator_next(sorted_btree_iterator *iter) {
+python_sorted_btreeiterator_next(btsort_iter_pyobject *iter) {
     PyObject *item;
 
     if (next_item(iter->path, &item)) {
@@ -1423,9 +1050,9 @@ python_sorted_btreeiterator_next(sorted_btree_iterator *iter) {
  */
 static int
 python_sorted_btree_contains(PyObject *self, PyObject *item) {
-    sorted_btree_object *tree = (sorted_btree_object *)self;
+    btsort_pyobject *tree = (btsort_pyobject *)self;
     char found;
-    PYBTREE_STACK_ALLOC_PATH(tree)
+    BT_STACK_ALLOC_PATH(tree)
 
     if (find_path_to_item(tree, item, 1, 1, &path, (char *)(&found)))
         return -1;
@@ -1439,7 +1066,7 @@ python_sorted_btree_contains(PyObject *self, PyObject *item) {
  */
 static int
 python_sorted_btree_nonzero(PyObject *self) {
-    return ((sorted_btree_object *)self)->root->filled ? 1 : 0;
+    return ((btsort_pyobject *)self)->root->filled ? 1 : 0;
 }
 
 
@@ -1450,9 +1077,9 @@ static char *split_kwargs[] = {"separator", "eq_goes_left", NULL};
 
 static PyObject *
 python_sorted_btree_split(PyObject *self, PyObject *args, PyObject *kwargs) {
-    sorted_btree_object *tree = (sorted_btree_object *)self;
-    sorted_btree_object *new_tree;
-    node_t *new_root;
+    btsort_pyobject *tree = (btsort_pyobject *)self;
+    btsort_pyobject *new_tree;
+    bt_node_t *new_root;
     PyObject *item;
     PyObject *eq_goes_left = Py_True;
     PyObject *result;
@@ -1464,12 +1091,12 @@ python_sorted_btree_split(PyObject *self, PyObject *args, PyObject *kwargs) {
     if (cut_tree(tree, item, PyObject_IsTrue(eq_goes_left), &new_root))
         return NULL;
 
-    new_tree = PyObject_GC_New(sorted_btree_object, &sorted_btree_type);
+    new_tree = PyObject_GC_New(btsort_pyobject, &btsort_pytypeobj);
     PyObject_GC_Track(new_tree);
     new_tree->root = new_root;
     new_tree->order = tree->order;
     new_tree->depth = tree->depth;
-    new_tree->flags = SORTBTREE_FLAG_INITED;
+    new_tree->flags = BT_FLAG_INITED;
 
     heal_left_edge(new_tree);
     heal_right_edge(tree);
@@ -1503,7 +1130,7 @@ python_sorted_btree_bulkload(PyObject *klass, PyObject *args) {
  */
 static PyObject *
 python_sorted_btree_copy(PyObject *self, PyObject *args) {
-    return (PyObject *)copy_tree((sorted_btree_object *)self);
+    return (PyObject *)copy_tree((btsort_pyobject *)self);
 }
 
 
@@ -1513,10 +1140,10 @@ python_sorted_btree_copy(PyObject *self, PyObject *args) {
 static PyObject *
 python_sorted_btree_after(PyObject *self, PyObject *item) {
     PyObject *result;
-    sorted_btree_object *tree = (sorted_btree_object *)self;
-    node_t *node;
+    btsort_pyobject *tree = (btsort_pyobject *)self;
+    bt_node_t *node;
     int index;
-    PYBTREE_STACK_ALLOC_PATH(tree);
+    BT_STACK_ALLOC_PATH(tree);
 
     if (find_path_to_leaf(tree, item, 0, &path))
         return NULL;
@@ -1548,10 +1175,10 @@ python_sorted_btree_after(PyObject *self, PyObject *item) {
 static PyObject *
 python_sorted_btree_before(PyObject *self, PyObject *item) {
     PyObject *result;
-    sorted_btree_object *tree = (sorted_btree_object *)self;
-    node_t *node;
+    btsort_pyobject *tree = (btsort_pyobject *)self;
+    bt_node_t *node;
     int index;
-    PYBTREE_STACK_ALLOC_PATH(tree);
+    BT_STACK_ALLOC_PATH(tree);
 
     if (find_path_to_leaf(tree, item, 1, &path))
         return NULL;
@@ -1734,11 +1361,11 @@ integer that indicates the most data items a single node may hold.");
 /*
  * the full type definition for the python object
  */
-PyTypeObject sorted_btree_type = {
+PyTypeObject btsort_pytypeobj = {
     PyObject_HEAD_INIT(&PyType_Type)
     0,
     "btree.sorted_btree",
-    sizeof(sorted_btree_object),
+    sizeof(btsort_pyobject),
     0,
     (destructor)sorted_btree_dealloc,          /* tp_dealloc */
     0,                                         /* tp_print */
@@ -1786,7 +1413,7 @@ static PyTypeObject sorted_btree_iterator_type = {
     PyObject_HEAD_INIT(&PyType_Type)
     0,
     "btree.sorted_btree_iterator",
-    sizeof(sorted_btree_iterator),
+    sizeof(btsort_iter_pyobject),
     0,
     (destructor)sorted_btree_iterator_dealloc,      /* tp_dealloc */
     0,                                              /* tp_print */

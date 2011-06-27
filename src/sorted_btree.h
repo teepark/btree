@@ -29,103 +29,34 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef SORTEDBTREE_H
-#define SORTEDBTREE_H
+#ifndef BT_SORTED_H
+#define BT_SORTED_H
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#if PY_MAJOR_VERSION == 2 && PY_MINOR_VERSION <= 5
-    #define Py_TYPE(ob) (((PyObject *)(ob))->ob_type)
-#endif
-
-/*
- * leaf and branch nodes, and a generic node_t to which they are both castable
- */
-#define NODE_HEAD      \
-    int filled;        \
-    PyObject **values; \
-
-typedef struct btree_leaf {
-    NODE_HEAD
-} leaf_t;
-
-typedef leaf_t node_t;
-
-typedef struct btree_branch {
-    NODE_HEAD
-    node_t **children;
-} branch_t;
+#include "btree_common.h"
 
 
 /*
- * the PyObject that wraps a root node and gets exposed to python
+ * the sorted_btree data structures don't need anything extra
  */
-typedef struct {
-    PyObject_HEAD
-    int order;
-    int depth;
-    char flags;
-    node_t *root;
-} sorted_btree_object;
+typedef bt_leaf_t btsort_leaf_t;
+typedef bt_branch_t btsort_branch_t;
+
+typedef bt_pyobject btsort_pyobject;
+typedef bt_iter_pyobject btsort_iter_pyobject;
+
 
 /*
  * the PyTypeObject of the btree class
  */
-PyTypeObject sorted_btree_type;
+PyTypeObject btsort_pytypeobj;
 
-#define SORTBTREE_FLAG_INITED 1
-
-
-/*
- * the necessary info to save our position and be
- * able to pick up traversing the tree in order
- */
-typedef struct {
-    int depth;
-    int *indexes;
-    node_t **lineage;
-    sorted_btree_object *tree;
-} path_t;
-
-#define PYBTREE_STACK_ALLOC_PATH(treeobj)   \
-    path_t path;                            \
-    int _indexes[(treeobj)->depth + 1];     \
-    node_t *_lineage[(treeobj)->depth + 1]; \
-    path.tree = (treeobj);                  \
-    path.indexes = _indexes;                \
-    path.lineage = _lineage;
-
-
-/*
- * the PyObject of a sorted_btree iterator
- */
-typedef struct {
-    PyObject_HEAD
-
-    path_t *path;
-} sorted_btree_iterator;
-
-
-/*
- * visitor function signatures for handing off to traversers
- */
-typedef int (*nodevisitor)(
-        node_t *node, char is_branch, int depth, void *data);
-
-typedef int (*itemvisitor)(
-        PyObject *item, char is_branch, int depth, void *data);
-
-
-/*
- * C api functions
- */
-int py_sorted_btree_insert(PyObject *tree, PyObject *item);
-int py_sorted_btree_remove(PyObject *tree, PyObject *item);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* SORTEDBTREE_H */
+#endif /* BT_SORTED_H */

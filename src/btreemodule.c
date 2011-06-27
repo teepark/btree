@@ -40,10 +40,10 @@
 PyMODINIT_FUNC
 initbtree(void) {
     PyObject *module = Py_InitModule("btree", NULL);
-    Py_INCREF(&sorted_btree_type);
+    Py_INCREF(&btsort_pytypeobj);
 
-    if (PyType_Ready(&sorted_btree_type) < 0)
+    if (PyType_Ready(&btsort_pytypeobj) < 0)
         return;
     PyModule_AddObject(module, "sorted_btree",
-            (PyObject *)(&sorted_btree_type));
+            (PyObject *)(&btsort_pytypeobj));
 }
