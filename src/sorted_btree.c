@@ -193,64 +193,6 @@ find_path_to_item(btsort_pyobject *tree, PyObject *value, char first,
 
 
 /*
- * splitting a btree by a separator value
- */
-static int
-cut_node(bt_node_t *node, PyObject *separator, int depth, int leaf_depth,
-        int order, char eq_goes_left, bt_node_t **new_node) {
-    /*
-     * this function recurses down the tree doing destructure operations at
-     * every step *and* has failure cases, but it can still all be done safely.
-     *
-     * this is because it copies data to the newly created node on the way down
-     * the tree, but doesn't do any destructive operation on the original node
-     * until it comes back up, after the last possible failure case has gone by
-     */
-    int index, rc;
-    int (*bisector)(PyObject **, int, PyObject *);
-
-    bisector = eq_goes_left ? bisect_right : bisect_left;
-    if ((index = bisector(node->values, node->filled, separator)) < 0)
-        return index;
-
-    *new_node = allocate_node(depth < leaf_depth, order);
-
-    memcpy((*new_node)->values, node->values + index,
-            sizeof(PyObject *) * (node->filled - index));
-
-    if (depth < leaf_depth) {
-        memcpy(((bt_branch_t *)(*new_node))->children + 1,
-                ((bt_branch_t *)node)->children + index + 1,
-                sizeof(bt_node_t *) * (node->filled - index));
-
-        if ((rc = cut_node(((bt_branch_t *)node)->children[index],
-                        separator,
-                        depth + 1,
-                        leaf_depth,
-                        order,
-                        eq_goes_left,
-                        ((bt_branch_t *)(*new_node))->children))) {
-            free_node(depth < leaf_depth, *new_node);
-            return rc;
-        }
-    }
-
-    (*new_node)->filled = node->filled - index;
-    node->filled = index;
-
-    return 0;
-}
-
-/* TODO: use a bt_path_t in cut_tree. shouldn't need cut_node at all */
-static int
-cut_tree(btsort_pyobject *tree, PyObject *separator, char eq_goes_left,
-        bt_node_t **new_root) {
-    return cut_node(tree->root, separator, 0, tree->depth, tree->order,
-            eq_goes_left, new_root);
-}
-
-
-/*
  * repairing the damage along a freshly cut edge
  */
 static void
@@ -332,6 +274,66 @@ heal_left_edge(btsort_pyobject *tree) {
         if (node->filled < (tree->order / 2))
             grow_node(&path, (tree->order / 2) - node->filled);
     }
+}
+
+
+/*
+ * splitting a btree by a separator value
+ */
+static btsort_pyobject *
+cut_tree(btsort_pyobject *tree, PyObject *separator, char eq_goes_left) {
+    btsort_pyobject *newtree;
+    bt_node_t *newroot, *node, *newnode, *parent;
+    int depth, index;
+    BT_STACK_ALLOC_PATH(tree)
+
+    /* trace out a path to follow as we cut down the tree */
+    if (find_path_to_item(tree, separator, !eq_goes_left, 0, &path, NULL))
+        return NULL;
+
+    /* allocate a new root */
+    newroot = newnode = allocate_node(tree->depth, tree->order);
+
+    /* follow the path down */
+    for (depth = 0; depth <= tree->depth; ++depth) {
+        node = path.lineage[depth];
+        index = path.indexes[depth];
+
+        /* copy values across to the new node */
+        memcpy(newnode->values, node->values + index,
+                sizeof(PyObject *) * (node->filled - index));
+
+        /* copy children to the new node */
+        if (depth < tree->depth)
+            memcpy(((bt_branch_t *)newnode)->children + 1,
+                    ((bt_branch_t *)node)->children + index + 1,
+                    sizeof(bt_node_t *) * (node->filled - index));
+
+        /* set the sizes of the nodes */
+        newnode->filled = node->filled - index;
+        node->filled = index;
+
+
+        /* create the node at the next depth
+           and make it a child of the last one */
+        parent = newnode;
+        if (depth < tree->depth) {
+            newnode = allocate_node(depth + 1 < tree->depth, tree->order);
+            ((bt_branch_t *)parent)->children[0] = newnode;
+        }
+    }
+
+    newtree = PyObject_GC_New(btsort_pyobject, &btsort_pytypeobj);
+    PyObject_GC_Track(newtree);
+    newtree->root = newroot;
+    newtree->order = tree->order;
+    newtree->depth = tree->depth;
+    newtree->flags = BT_FLAG_INITED;
+
+    heal_right_edge(tree);
+    heal_left_edge(newtree);
+
+    return newtree;
 }
 
 
@@ -1079,7 +1081,6 @@ static PyObject *
 python_sorted_btree_split(PyObject *self, PyObject *args, PyObject *kwargs) {
     btsort_pyobject *tree = (btsort_pyobject *)self;
     btsort_pyobject *new_tree;
-    bt_node_t *new_root;
     PyObject *item;
     PyObject *eq_goes_left = Py_True;
     PyObject *result;
@@ -1088,18 +1089,8 @@ python_sorted_btree_split(PyObject *self, PyObject *args, PyObject *kwargs) {
                 args, kwargs, "O|O", split_kwargs, &item, &eq_goes_left))
         return NULL;
 
-    if (cut_tree(tree, item, PyObject_IsTrue(eq_goes_left), &new_root))
+    if (!(new_tree = cut_tree(tree, item, PyObject_IsTrue(eq_goes_left))))
         return NULL;
-
-    new_tree = PyObject_GC_New(btsort_pyobject, &btsort_pytypeobj);
-    PyObject_GC_Track(new_tree);
-    new_tree->root = new_root;
-    new_tree->order = tree->order;
-    new_tree->depth = tree->depth;
-    new_tree->flags = BT_FLAG_INITED;
-
-    heal_left_edge(new_tree);
-    heal_right_edge(tree);
 
     result = PyTuple_New(2);
     PyTuple_SET_ITEM(result, 0, (PyObject *)tree);
