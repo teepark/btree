@@ -274,7 +274,7 @@ heal_right_edge(btsort_pyobject *tree) {
     original_depth = tree->depth;
 
     /* second pass, grow any nodes that are too small along the right edge */
-    BT_STACK_ALLOC_PATH(tree);
+    BT_STACK_ALLOC_PATH(tree)
     for (i = 1; i <= tree->depth; ++i) {
         if (tree->depth < original_depth) {
             i--;
@@ -314,7 +314,7 @@ heal_left_edge(btsort_pyobject *tree) {
     }
 
     /* second pass, grow any nodes that are too small along the right edge */
-    BT_STACK_ALLOC_PATH(tree);
+    BT_STACK_ALLOC_PATH(tree)
     for (i = 1; i <= tree->depth; ++i) {
         if (tree->depth < original_depth) {
             i--;
@@ -868,7 +868,7 @@ static PyObject *
 python_sorted_btree_insert(PyObject *self, PyObject *args) {
     PyObject *item;
     btsort_pyobject *tree = (btsort_pyobject *)self;
-    BT_STACK_ALLOC_PATH(tree);
+    BT_STACK_ALLOC_PATH(tree)
 
     if (!PyArg_ParseTuple(args, "O", &item)) return NULL;
 
@@ -896,7 +896,7 @@ py_sorted_btree_insert(PyObject *tree, PyObject *item) {
         return -1;
     }
 
-    BT_STACK_ALLOC_PATH((btsort_pyobject *)tree);
+    BT_STACK_ALLOC_PATH((btsort_pyobject *)tree)
 
     rc = find_path_to_leaf((btsort_pyobject *)tree, item, 1, &path);
     if (rc) return rc;
@@ -915,7 +915,7 @@ python_sorted_btree_remove(PyObject *self, PyObject *args) {
     btsort_pyobject *tree = (btsort_pyobject *)self;
     PyObject *item;
     char found;
-    BT_STACK_ALLOC_PATH(tree);
+    BT_STACK_ALLOC_PATH(tree)
 
     if (!PyArg_ParseTuple(args, "O", &item)) return NULL;
 
@@ -951,7 +951,7 @@ py_sorted_btree_remove(PyObject *tree, PyObject *item) {
         return -1;
     }
 
-    BT_STACK_ALLOC_PATH((btsort_pyobject *)tree);
+    BT_STACK_ALLOC_PATH((btsort_pyobject *)tree)
 
     Py_INCREF(item);
     rc = find_path_to_item(
