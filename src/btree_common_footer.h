@@ -472,13 +472,31 @@ cut_tree(btsort_pyobject *tree, bt_path_t path) {
     bt_node_t *newroot, *node, *newnode, *parent;
     int depth, index;
 
-    /* allocate a new root */
+    /* allocate a new root and tree */
     newroot = newnode = allocate_node(tree->depth, tree->order);
+
+    newtree = PyObject_GC_New(btsort_pyobject, &btsort_pytypeobj);
+    PyObject_GC_Track(newtree);
+    newtree->root = newroot;
+    newtree->order = tree->order;
+    newtree->depth = tree->depth;
+    newtree->flags = BT_FLAG_INITED;
+
+    /* stack allocate a path for the new tree by hand */
+    bt_path_t newpath;
+    int _newpath_indexes[tree->depth + 1];
+    bt_node_t *_newpath_lineage[tree->depth + 1];
+    newpath.indexes = _newpath_indexes;
+    newpath.lineage = _newpath_lineage;
+    newpath.tree = newtree;
 
     /* follow the path down */
     for (depth = 0; depth <= tree->depth; ++depth) {
         node = path.lineage[depth];
         index = path.indexes[depth];
+
+        newpath.indexes[depth] = 0;
+        newpath.lineage[depth] = newnode;
 
         /* copy values across to the new node */
         memcpy(newnode->values, node->values + index,
@@ -494,6 +512,10 @@ cut_tree(btsort_pyobject *tree, bt_path_t path) {
         newnode->filled = node->filled - index;
         node->filled = index;
 
+        /* node sizes have changed */
+        path.depth = newpath.depth = depth;
+        node_sizechange(&path);
+        node_sizechange(&newpath);
 
         /* create the node at the next depth
            and make it a child of the last one */
@@ -503,13 +525,6 @@ cut_tree(btsort_pyobject *tree, bt_path_t path) {
             ((bt_branch_t *)parent)->children[0] = newnode;
         }
     }
-
-    newtree = PyObject_GC_New(btsort_pyobject, &btsort_pytypeobj);
-    PyObject_GC_Track(newtree);
-    newtree->root = newroot;
-    newtree->order = tree->order;
-    newtree->depth = tree->depth;
-    newtree->flags = BT_FLAG_INITED;
 
     heal_right_edge(tree);
     heal_left_edge(newtree);
