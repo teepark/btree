@@ -44,8 +44,6 @@ static void node_pass_left(char is_branch, bt_node_t *source,
         bt_node_t *target, int count, bt_branch_t *parent, int sep_index);
 static void node_pass_right(char is_branch, bt_node_t *source,
         bt_node_t *target, int count, bt_branch_t *parent, int sep_index);
-static int find_path_to_item(btsort_pyobject *tree, PyObject *value, char
-        first, char find, bt_path_t *path, char *found);
 
 #include "btree_common_footer.h"
 
@@ -946,8 +944,14 @@ python_sorted_btree_split(PyObject *self, PyObject *args, PyObject *kwargs) {
                 args, kwargs, "O|O", split_kwargs, &item, &eq_goes_left))
         return NULL;
 
-    if (!(new_tree = cut_tree(tree, item, PyObject_IsTrue(eq_goes_left))))
+    BT_STACK_ALLOC_PATH(tree)
+
+    /* trace out a path along which to cut */
+    if (find_path_to_item(
+            tree, item, !PyObject_IsTrue(eq_goes_left), 0, &path, NULL))
         return NULL;
+
+    new_tree = cut_tree(tree, path);
 
     result = PyTuple_New(2);
     PyTuple_SET_ITEM(result, 0, (PyObject *)tree);

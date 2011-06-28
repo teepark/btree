@@ -44,9 +44,6 @@
  *  - void node_pass_right(char is_branch, bt_node_t *source,
  *                         bt_node_t *target, int count,
  *                         bt_branch_t *parent, int sep_index)
- *  - static int find_path_to_item(btsort_pyobject *tree, PyObject *value,
- *                                 char first, char find, bt_path_t *path,
- *                                 char *found)
  */
 
 
@@ -467,18 +464,13 @@ heal_left_edge(btsort_pyobject *tree) {
 
 
 /*
- * splitting a btree by a separator value
+ * splitting a btree along a path
  */
 static btsort_pyobject *
-cut_tree(btsort_pyobject *tree, PyObject *separator, char eq_goes_left) {
+cut_tree(btsort_pyobject *tree, bt_path_t path) {
     btsort_pyobject *newtree;
     bt_node_t *newroot, *node, *newnode, *parent;
     int depth, index;
-    BT_STACK_ALLOC_PATH(tree)
-
-    /* trace out a path to follow as we cut down the tree */
-    if (find_path_to_item(tree, separator, !eq_goes_left, 0, &path, NULL))
-        return NULL;
 
     /* allocate a new root */
     newroot = newnode = allocate_node(tree->depth, tree->order);
