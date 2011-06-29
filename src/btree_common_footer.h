@@ -531,3 +531,152 @@ cut_tree(btsort_pyobject *tree, bt_path_t path) {
 
     return newtree;
 }
+
+
+/*
+ * loading a sorted list into a new btree
+ */
+static int
+load_generation(PyObject **items, int item_count, bt_node_t **children,
+        int order, char is_branch, bt_node_t **nodes, PyObject **separators) {
+    int i, j, node_counter = 0, needed, children_offset;
+    bt_node_t *node;
+    bt_node_t *neighbor;
+
+    /*
+     * pull `order` items into a new node, then 1 item as a separator, repeat
+     */
+    node = allocate_node(is_branch, order);
+    for (i = 0; i < item_count; ++i) {
+        if (i % (order + 1) == order) {
+            /* at a separator value */
+            node->filled = order;
+            nodes[node_counter] = node;
+            separators[node_counter] = items[i];
+            node = allocate_node(is_branch, order);
+            node_counter++;
+        }
+        else {
+            /* still inside a node */
+            node->values[i % (order + 1)] = items[i];
+        }
+    }
+    node->filled = i % (order + 1);
+    nodes[node_counter] = node;
+
+    /*
+     * if the generation's final node didn't wind up with enough items,
+     * pass enough over from the penultimate node to make both legal
+     */
+    if (node_counter && node->filled < (order / 2)) {
+        /* get some items from the previous node to make everything legal */
+        needed = (order / 2) - node->filled;
+        neighbor = nodes[node_counter - 1];
+
+        /* make space for the items to be moved */
+        memmove(node->values + needed, node->values,
+                sizeof(PyObject *) * node->filled);
+
+        /* prepend the item from the separators */
+        node->values[needed - 1] = separators[node_counter - 1];
+
+        /* make the first item to be moved be the separator */
+        separators[node_counter - 1] = neighbor->values[
+            neighbor->filled - needed];
+
+        /* copy the other items to be moved */
+        memcpy(node->values, neighbor->values + neighbor->filled - needed + 1,
+                sizeof(PyObject *) * (needed - 1));
+
+        node->filled += needed;
+        neighbor->filled -= needed;
+    }
+
+    /*
+     * if a non-leaf generation, hand out the children to the new nodes
+     */
+    if (is_branch)
+        for (i = children_offset = 0; i <= node_counter; ++i) {
+            node = nodes[i];
+            for (j = 0; j <= node->filled; ++j)
+                ((bt_branch_t *)node)->children[j] = children[
+                    children_offset++];
+        }
+
+    return node_counter + 1;
+}
+
+static int
+bulkload(bt_pyobject *tree, PyObject *iterable_source, int order) {
+    PyObject_GC_Track(tree);
+    char result;
+    int i, j, count = 0, sepsize = 64, depth = 0;
+    PyObject *prev;
+    PyObject **seps_next, **separators = malloc(sizeof(PyObject *) * sepsize);
+
+    if ((prev = separators[0] = PyIter_Next(iterable_source))) {
+        for (i = 1;; ++i) {
+            if (i >= sepsize) {
+                sepsize *= 2;
+
+                seps_next = realloc(separators, sizeof(PyObject *) * sepsize);
+                if (seps_next == NULL) {
+                    for (j = 0; j < i; ++j) Py_DECREF(separators[j]);
+                    free(separators);
+                    PyObject_GC_UnTrack(tree);
+                    PyObject_GC_Del(tree);
+                    PyErr_SetString(PyExc_MemoryError, "failed to realloc");
+                    return 1;
+                }
+
+                separators = seps_next;
+            }
+
+            separators[i] = PyIter_Next(iterable_source);
+            if (separators[i] == NULL) break;
+
+            prev = separators[i];
+        }
+
+        count = i;
+    }
+
+    bt_node_t *genX[(count / order) + 1], *genY[(count / order) + 1];
+
+    Py_DECREF(iterable_source);
+
+    /*
+     * `genX` and `genY` alternate as the previous and current generation.
+     *
+     * using the `separators` array in this way (as both a to-read argument and
+     * a to-write argument) looks dangerous, but the reading of `items` and the
+     * writing of `separators` are both done left-to-right and the reading
+     * starts first and outpaces the writing.
+     *
+     * we lose references to generations older than the previous one, but
+     * children pointers are also set up in load_generation, so they are still
+     * reachable.
+     */
+    count = (Py_ssize_t)load_generation(
+            separators, count, NULL, order, 0, &(genX[0]), separators);
+    while (count > 1) {
+        count = (Py_ssize_t)load_generation(separators, count - 1, &(genX[0]),
+                order, 1, &(genY[0]), separators);
+        depth++;
+
+        if (count <= 1) break;
+
+        count = (Py_ssize_t)load_generation(separators, count - 1, &(genY[0]),
+                order, 1, &(genX[0]), separators);
+        depth++;
+    }
+
+    free(separators);
+
+    tree->root = ((depth & 1) ? genY : genX)[0];
+    tree->flags = BT_FLAG_INITED;
+    tree->order = order;
+    tree->depth = depth;
+
+    return 0;
+}
