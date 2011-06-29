@@ -543,9 +543,12 @@ load_generation(PyObject **items, int item_count, bt_node_t **children,
        node_sizechange never iterates up to any parents */
     bt_path_t dummy_path;
     bt_node_t *_dummy_lineage[1];
+    int _dummy_indexes[1];
     dummy_path.tree = NULL;
     dummy_path.depth = 0;
-    dummy_path.indexes = {0};
+    dummy_path.indexes = _dummy_indexes;
+    dummy_path.indexes[0] = 0;
+    dummy_path.lineage = _dummy_lineage;
     dummy_path.lineage[0] = NULL;
 
     /*
