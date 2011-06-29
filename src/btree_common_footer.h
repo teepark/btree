@@ -539,9 +539,19 @@ cut_tree(btsort_pyobject *tree, bt_path_t path) {
 static int
 load_generation(PyObject **items, int item_count, bt_node_t **children,
         int order, char is_branch, bt_node_t **nodes, PyObject **separators) {
-    int i, j, node_counter = 0, needed, children_offset;
+    int i, j, node_counter = 0, needed, offset;
     bt_node_t *node;
     bt_node_t *neighbor;
+
+    /* this path object is for use in node_sizechange calls. the depth is
+       always 0 so that every node put in it looks like a root, so that
+       node_sizechange never iterates up to any parents */
+    bt_path_t dummy_path;
+    bt_node_t *_dummy_lineage[1];
+    dummy_path.tree = NULL;
+    dummy_path.depth = 0;
+    dummy_path.indexes = {0};
+    dummy_path.lineage[0] = NULL;
 
     /*
      * pull `order` items into a new node, then 1 item as a separator, repeat
@@ -596,11 +606,14 @@ load_generation(PyObject **items, int item_count, bt_node_t **children,
      * if a non-leaf generation, hand out the children to the new nodes
      */
     if (is_branch)
-        for (i = children_offset = 0; i <= node_counter; ++i) {
+        for (i = offset = 0; i <= node_counter; ++i) {
             node = nodes[i];
             for (j = 0; j <= node->filled; ++j)
-                ((bt_branch_t *)node)->children[j] = children[
-                    children_offset++];
+                ((bt_branch_t *)node)->children[j] = children[offset++];
+
+            /* record the size changes of the new nodes */
+            dummy_path.lineage[0] = node;
+            node_sizechange(&dummy_path);
         }
 
     return node_counter + 1;
