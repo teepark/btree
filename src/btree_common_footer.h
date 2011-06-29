@@ -770,3 +770,72 @@ traverse_items(bt_pyobject *tree, bt_item_visitor pred, void *data) {
     return traverse_items_recursion(tree->root, 0, tree->depth, pred, data);
 }
 #endif
+
+
+/*
+ * reentrant generalized in-order item traversal
+ */
+static int
+next_item(bt_path_t *path, PyObject **ptr) {
+    int depth = path->depth;
+    int index = path->indexes[depth];
+    bt_node_t *node = path->lineage[depth];
+
+    if (!path->tree->root->filled) return 1;
+
+    if (depth < path->tree->depth) {
+        /*
+         * in a branch
+         */
+
+        /* the end condition */
+        if (index >= node->filled)
+            return 1;
+
+        /* yield the value out of the branch */
+        *ptr = node->values[index++];
+
+        /* traverse down to the next leaf for the next call */
+        path->indexes[depth]++;
+        while (depth++ < path->tree->depth) {
+            path->depth++;
+            node = ((bt_branch_t *)node)->children[index];
+            path->lineage[depth] = node;
+            path->indexes[depth] = index = 0;
+        }
+
+        return 0;
+    }
+
+    /*
+     * in a leaf
+     */
+
+    /* single leaf exit condition */
+    if (path->tree->depth == 0 && index >= path->tree->root->filled)
+        return 1;
+
+    /* yield the current value */
+    *ptr = node->values[index++];
+
+    if (index < node->filled) {
+        path->indexes[depth]++;
+        return 0;
+    }
+
+    /* traverse up to the next unfinished branch */
+    while (depth--) {
+        node = path->lineage[depth];
+        index = path->indexes[depth];
+
+        if (index <= node->filled - 1) {
+            path->depth = depth;
+            return 0;
+        }
+    }
+
+    /* no unfinished branches, so set the error condition */
+    path->depth = 0;
+    path->indexes[0] = (path->lineage[0])->filled;
+    return 0;
+}
