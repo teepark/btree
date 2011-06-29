@@ -779,7 +779,9 @@ python_sorted_btree_split(PyObject *self, PyObject *args, PyObject *kwargs) {
             tree, item, !PyObject_IsTrue(eq_goes_left), 0, &path, NULL))
         return NULL;
 
-    new_tree = cut_tree(tree, path);
+    new_tree = PyObject_GC_New(btsort_pyobject, &btsort_pytypeobj);
+    PyObject_GC_Track(new_tree);
+    cut_tree(tree, path, new_tree);
 
     result = PyTuple_New(2);
     PyTuple_SET_ITEM(result, 0, (PyObject *)tree);

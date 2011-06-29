@@ -382,7 +382,7 @@ leaf_insert(PyObject *value, bt_path_t *path) {
  * repairing the damage along a freshly cut edge
  */
 static void
-heal_right_edge(btsort_pyobject *tree) {
+heal_right_edge(bt_pyobject *tree) {
     int i, j, original_depth = tree->depth;
     bt_node_t *node, *next;
 
@@ -423,7 +423,7 @@ heal_right_edge(btsort_pyobject *tree) {
 }
 
 static void
-heal_left_edge(btsort_pyobject *tree) {
+heal_left_edge(bt_pyobject *tree) {
     int i, j, original_depth = tree->depth;
     bt_node_t *node, *next;
 
@@ -466,19 +466,16 @@ heal_left_edge(btsort_pyobject *tree) {
 /*
  * splitting a btree along a path
  */
-static btsort_pyobject *
-cut_tree(btsort_pyobject *tree, bt_path_t path) {
-    btsort_pyobject *newtree;
+static void
+cut_tree(bt_pyobject *tree, bt_path_t path, bt_pyobject *newtree) {
     bt_node_t *newroot, *node, *newnode, *parent;
     int depth, index;
 
     /* allocate a new root and tree */
     newroot = newnode = allocate_node(tree->depth, tree->order);
 
-    newtree = PyObject_GC_New(btsort_pyobject, &btsort_pytypeobj);
-    PyObject_GC_Track(newtree);
-    newtree->root = newroot;
     newtree->order = tree->order;
+    newtree->root = newroot;
     newtree->depth = tree->depth;
     newtree->flags = BT_FLAG_INITED;
 
@@ -528,8 +525,6 @@ cut_tree(btsort_pyobject *tree, bt_path_t path) {
 
     heal_right_edge(tree);
     heal_left_edge(newtree);
-
-    return newtree;
 }
 
 
