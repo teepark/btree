@@ -876,9 +876,9 @@ next_item(bt_path_t *path, PyObject **target) {
         return 1;
 
     /* yield the current value */
-    *target = node->values[index++];
+    *target = node->values[index];
 
-    if (index < node->filled) {
+    if (index++ < node->filled) {
         path->indexes[depth]++;
         return 0;
     }
