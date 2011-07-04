@@ -36,15 +36,19 @@
  * pass value[s] (and for branch nodes, child[ren]) to neighbors
  */
 void
-btnode_pass_left(char is_branch, bt_node_t *source, bt_node_t *target, int count,
-        bt_branch_t *parent, int sep_index) {
+btnode_pass_left(bt_path_t *path, int count) {
     if (!count) return;
+    char is_branch = path->depth < path->tree->depth;
+    bt_branch_t *parent = ((bt_branch_t *)path->lineage[path->depth - 1]);
+    int sep_index = path->indexes[path->depth - 1];
+    bt_node_t *source = path->lineage[path->depth];
+    bt_node_t *target = parent->children[sep_index - 1];
 
     /* append the parent's separator value to the target */
-    target->values[target->filled] = parent->values[sep_index];
+    target->values[target->filled] = parent->values[sep_index - 1];
 
     /* use the last value to be moved from the source as the new separator */
-    parent->values[sep_index] = source->values[count - 1];
+    parent->values[sep_index - 1] = source->values[count - 1];
 
     /* continue appending from the beginning of the source's values */
     memcpy(target->values + target->filled + 1, source->values,
@@ -130,8 +134,7 @@ shrink_node(bt_path_t *path) {
         if (parent_index) {
             sibling = parent->children[parent_index - 1];
             if (sibling->filled < path->tree->order) {
-                node_pass_left(path->depth < path->tree->depth, node,
-                        sibling, 1, parent, parent_index - 1);
+                node_pass_left(path, 1);
                 return;
             }
         }
@@ -236,8 +239,7 @@ grow_node(bt_path_t *path, int count) {
         right = parent->children[parent_index + 1];
         if (right->filled >= (path->tree->order / 2) + count) {
             /* there is a right neighbor, and it has enough spare items */
-            node_pass_left(path->depth < path->tree->depth, right, node, count,
-                    parent, parent_index);
+            node_pass_left(path, count);
             return;
         }
     }

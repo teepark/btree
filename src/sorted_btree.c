@@ -70,9 +70,8 @@ free_node(char is_branch, bt_node_t *node) {
 static void
 node_sizechange(bt_path_t *path) {};
 
-static void node_pass_left(char is_branch, bt_node_t *source,
-        bt_node_t *target, int count, bt_branch_t *parent, int sep_index) {
-    btnode_pass_left(is_branch, source, target, count, parent, sep_index);
+static void node_pass_left(bt_path_t *path, int count) {
+    btnode_pass_left(path, count);
 }
 
 static void node_pass_right(char is_branch, bt_node_t *source,
