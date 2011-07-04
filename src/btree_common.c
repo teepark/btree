@@ -876,12 +876,11 @@ next_item(bt_path_t *path, PyObject **target) {
         return 1;
 
     /* yield the current value */
-    *target = node->values[index];
+    *target = node->values[index++];
+    path->indexes[depth]++;
 
-    if (index++ < node->filled) {
-        path->indexes[depth]++;
+    if (index < node->filled)
         return 0;
-    }
 
     /* traverse up to the next unfinished branch */
     while (depth--) {
