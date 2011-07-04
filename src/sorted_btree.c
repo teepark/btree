@@ -642,7 +642,7 @@ python_sorted_btree_split(PyObject *self, PyObject *args, PyObject *kwargs) {
 static PyObject *
 python_sorted_btree_bulkload(PyObject *klass, PyObject *args) {
     int i, result;
-    PyObject *item_list, *order, *iter, *item, *prev;
+    PyObject *item_list, *order, *iter, *item, *prev = NULL;
 
     if (!PyArg_ParseTuple(args, "OO!", &item_list, &PyInt_Type, &order))
         return NULL;
@@ -666,7 +666,7 @@ python_sorted_btree_bulkload(PyObject *klass, PyObject *args) {
         }
         prev = item;
     }
-    Py_DECREF(prev);
+    if (prev) Py_DECREF(prev);
     Py_DECREF(iter);
 
     if ((iter = PyObject_GetIter(item_list)) == NULL)
