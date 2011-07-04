@@ -151,8 +151,7 @@ static void node_sizechange(bt_path_t *path);
 
 static void node_pass_left(bt_path_t *path, int count);
 
-static void node_pass_right(char is_branch, bt_node_t *source,
-        bt_node_t *target, int count, bt_branch_t *parent, int sep_index);
+static void node_pass_right(bt_path_t *path, int count);
 
 
 #ifdef __cplusplus
