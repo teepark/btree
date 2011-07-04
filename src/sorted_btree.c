@@ -35,17 +35,8 @@
 #include "sorted_btree.h"
 #include "offsetstring.h"
 
-
-/* forward declarations for the code in common_footer.h */
-static bt_node_t* allocate_node(char is_branch, int order);
-static void free_node(char is_branch, bt_node_t *node);
-static void node_sizechange(bt_path_t *path);
-static void node_pass_left(char is_branch, bt_node_t *source,
-        bt_node_t *target, int count, bt_branch_t *parent, int sep_index);
-static void node_pass_right(char is_branch, bt_node_t *source,
-        bt_node_t *target, int count, bt_branch_t *parent, int sep_index);
-
-#include "btree_common_footer.h"
+#include "btree_common.h"
+#include "btree_common.c"
 
 
 /*

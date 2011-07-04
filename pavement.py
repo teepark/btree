@@ -17,7 +17,7 @@ setup(
     license="BSD",
     ext_modules=[Extension(
         'btree',
-        ['src/btreemodule.c', 'src/sorted_btree.c', 'src/btree_common.c'],
+        ['src/btreemodule.c', 'src/sorted_btree.c'],
         include_dirs=())],
     classifiers = [
         "Development Status :: 3 - Alpha",
@@ -31,9 +31,12 @@ setup(
 MANIFEST = (
     "setup.py",
     "paver-minilib.zip",
-    "btreemodule.c",
-    "sorted_btree.c",
-    "sorted_btree.h",
+    "src/btree_common.c",
+    "src/btree_common.h",
+    "src/btreemodule.c",
+    "src/offsetstring.h",
+    "src/sorted_btree.c",
+    "src/sorted_btree.h",
 )
 
 @task
