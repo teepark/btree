@@ -72,11 +72,11 @@ typedef struct {
     PyObject_HEAD   \
     int order;      \
     int depth;      \
-    char flags;     \
-    bt_node_t *root;
+    char flags;
 
 typedef struct {
     BT_PYOBJECT
+    bt_node_t *root;
 } bt_pyobject;
 
 
