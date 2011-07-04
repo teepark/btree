@@ -138,22 +138,6 @@ typedef int (*bt_item_visitor)(
 } while(0)
 
 
-/*
- * forward declarations necessary for btree_common.c
- *
- * implementations must be provided by the individual btrees
- */
-static bt_node_t* allocate_node(char is_branch, int order);
-
-static void free_node(char is_branch, bt_node_t *node);
-
-static void node_sizechange(bt_path_t *path);
-
-static void node_pass_left(bt_path_t *path, int count);
-
-static void node_pass_right(bt_path_t *path, int count);
-
-
 #ifdef __cplusplus
 }
 #endif
