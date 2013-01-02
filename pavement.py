@@ -10,7 +10,7 @@ from paver.setuputils import setup
 setup(
     name="btree",
     description="BTree implementation as a C python extension",
-    version="0.1.0",
+    version="0.2.0",
     author="Travis J Parker",
     author_email="travis.parker@gmail.com",
     url="http://github.com/teepark/btree",
