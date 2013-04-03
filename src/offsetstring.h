@@ -172,9 +172,11 @@ typedef struct {
     if ((string)->capacity != old_len) {                              \
         char *temp = (string)->data;                                  \
         (string)->data = realloc((string)->data, (string)->capacity); \
-        *(rc) = (temp == NULL);                                       \
-        if (*(rc)) (string)->data = temp;                             \
-        else (string)->capacity = old_len;                            \
+        *(rc) = (NULL == (string)->data);                             \
+        if (*(rc)) {                                                  \
+            (string)->data = temp;                                    \
+            (string)->capacity = old_len;                             \
+        }                                                             \
     }                                                                 \
 } while (0)
 
