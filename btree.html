@@ -2,17 +2,20 @@
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
   "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
 
+
 <html xmlns="http://www.w3.org/1999/xhtml">
   <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
     
-    <title>btree &mdash; btree v0.1.0 documentation</title>
+    <title>btree &mdash; btree 0.2.1 documentation</title>
+    
     <link rel="stylesheet" href="static/nature.css" type="text/css" />
     <link rel="stylesheet" href="static/pygments.css" type="text/css" />
+    
     <script type="text/javascript">
       var DOCUMENTATION_OPTIONS = {
         URL_ROOT:    '',
-        VERSION:     '0.1.0',
+        VERSION:     '0.2.1',
         COLLAPSE_INDEX: false,
         FILE_SUFFIX: '.html',
         HAS_SOURCE:  true
@@ -21,7 +24,7 @@
     <script type="text/javascript" src="static/jquery.js"></script>
     <script type="text/javascript" src="static/underscore.js"></script>
     <script type="text/javascript" src="static/doctools.js"></script>
-    <link rel="top" title="btree v0.1.0 documentation" href="index.html" />
+    <link rel="top" title="btree 0.2.1 documentation" href="index.html" />
     <link rel="prev" title="Welcome to btree’s documentation!" href="index.html" /> 
   </head>
   <body>
@@ -37,7 +40,7 @@
         <li class="right" >
           <a href="index.html" title="Welcome to btree’s documentation!"
              accesskey="P">previous</a> |</li>
-        <li><a href="index.html">btree v0.1.0 documentation</a> &raquo;</li> 
+        <li><a href="index.html">btree 0.2.1 documentation</a> &raquo;</li> 
       </ul>
     </div>  
 
@@ -54,51 +57,41 @@
 <dd><p>A n-ary tree container type for sorted data</p>
 <p>The constructor takes 1 argument, the tree&#8217;s order. This is an
 integer that indicates the most data items a single node may hold.</p>
-<dl class="attribute">
+<dl class="method">
 <dt id="btree.sorted_btree.after">
-<tt class="descname">after</tt><a class="headerlink" href="#btree.sorted_btree.after" title="Permalink to this definition">¶</a></dt>
+<tt class="descname">after</tt><big>(</big><big>)</big><a class="headerlink" href="#btree.sorted_btree.after" title="Permalink to this definition">¶</a></dt>
 <dd><p>returns the item from the sorted_btree which would come next in sorted order</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
-<li><strong>item</strong> &#8211; the object to compare against items contained in the sorted_btree</li>
-</ul>
-</td>
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>item</strong> &#8211; the object to compare against items contained in the sorted_btree</td>
 </tr>
-<tr class="field"><th class="field-name">Raises :</th><td class="field-body"><p class="first"><tt class="docutils literal"><span class="pre">ValueError</span></tt> if the <tt class="docutils literal"><span class="pre">item</span></tt> argument would come after everything
-contained in the sorted_btree</p>
-</td>
+<tr class="field-even field"><th class="field-name">Raises :</th><td class="field-body"><tt class="docutils literal"><span class="pre">ValueError</span></tt> if the <tt class="docutils literal"><span class="pre">item</span></tt> argument would come after everything
+contained in the sorted_btree</td>
 </tr>
-<tr class="field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last">an object from the btree, the one that would appear next after the
-<tt class="docutils literal"><span class="pre">item</span></tt> argument in sorted order</p>
-</td>
+<tr class="field-odd field"><th class="field-name">Returns:</th><td class="field-body">an object from the btree, the one that would appear next after the
+<tt class="docutils literal"><span class="pre">item</span></tt> argument in sorted order</td>
 </tr>
 </tbody>
 </table>
 </dd></dl>
 
-<dl class="attribute">
+<dl class="method">
 <dt id="btree.sorted_btree.before">
-<tt class="descname">before</tt><a class="headerlink" href="#btree.sorted_btree.before" title="Permalink to this definition">¶</a></dt>
+<tt class="descname">before</tt><big>(</big><big>)</big><a class="headerlink" href="#btree.sorted_btree.before" title="Permalink to this definition">¶</a></dt>
 <dd><p>returns the item from the sorted_btree before the argument in sorted order</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
-<li><strong>item</strong> &#8211; the object to compare against items contained in the sorted_btree</li>
-</ul>
-</td>
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>item</strong> &#8211; the object to compare against items contained in the sorted_btree</td>
 </tr>
-<tr class="field"><th class="field-name">Raises :</th><td class="field-body"><p class="first"><tt class="docutils literal"><span class="pre">ValueError</span></tt> if the <tt class="docutils literal"><span class="pre">item</span></tt> argument would come before everything
-contained in the sorted_btree</p>
-</td>
+<tr class="field-even field"><th class="field-name">Raises :</th><td class="field-body"><tt class="docutils literal"><span class="pre">ValueError</span></tt> if the <tt class="docutils literal"><span class="pre">item</span></tt> argument would come before everything
+contained in the sorted_btree</td>
 </tr>
-<tr class="field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last">the object from the btree which would appear before the <tt class="docutils literal"><span class="pre">item</span></tt>
-argument in sorted order</p>
-</td>
+<tr class="field-odd field"><th class="field-name">Returns:</th><td class="field-body">the object from the btree which would appear before the <tt class="docutils literal"><span class="pre">item</span></tt>
+argument in sorted order</td>
 </tr>
 </tbody>
 </table>
@@ -112,28 +105,28 @@ argument in sorted order</p>
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
 <li><strong>data</strong> (<em>iterable</em>) &#8211; the items to load into the sorted_btree</li>
 <li><strong>order</strong> (<em>int</em>) &#8211; the branching order for the sorted_btree</li>
 </ul>
 </td>
 </tr>
-<tr class="field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last">a new loaded sorted_btree instance</p>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last">a new loaded sorted_btree instance</p>
 </td>
 </tr>
 </tbody>
 </table>
 </dd></dl>
 
-<dl class="attribute">
+<dl class="method">
 <dt id="btree.sorted_btree.copy">
-<tt class="descname">copy</tt><a class="headerlink" href="#btree.sorted_btree.copy" title="Permalink to this definition">¶</a></dt>
+<tt class="descname">copy</tt><big>(</big><big>)</big><a class="headerlink" href="#btree.sorted_btree.copy" title="Permalink to this definition">¶</a></dt>
 <dd><p>make a shallow copy of the btree</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field"><th class="field-name">Returns:</th><td class="field-body">a new btree with the same order, contents and structure</td>
+<tr class="field-odd field"><th class="field-name">Returns:</th><td class="field-body">a new btree with the same order, contents and structure</td>
 </tr>
 </tbody>
 </table>
@@ -145,21 +138,17 @@ argument in sorted order</p>
 <dd><p>The current depth of the tree (just a single leaf is a depth of 0)</p>
 </dd></dl>
 
-<dl class="attribute">
+<dl class="method">
 <dt id="btree.sorted_btree.insert">
-<tt class="descname">insert</tt><a class="headerlink" href="#btree.sorted_btree.insert" title="Permalink to this definition">¶</a></dt>
+<tt class="descname">insert</tt><big>(</big><big>)</big><a class="headerlink" href="#btree.sorted_btree.insert" title="Permalink to this definition">¶</a></dt>
 <dd><p>insert an object into the sorted_btree</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
-<li><strong>obj</strong> &#8211; the object to insert</li>
-</ul>
-</td>
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>obj</strong> &#8211; the object to insert</td>
 </tr>
-<tr class="field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last"><tt class="xref docutils literal"><span class="pre">None</span></tt></p>
-</td>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><tt class="docutils literal"><span class="pre">None</span></tt></td>
 </tr>
 </tbody>
 </table>
@@ -171,46 +160,41 @@ argument in sorted order</p>
 <dd><p>The tree&#8217;s order as passed to the constructor.</p>
 </dd></dl>
 
-<dl class="attribute">
+<dl class="method">
 <dt id="btree.sorted_btree.remove">
-<tt class="descname">remove</tt><a class="headerlink" href="#btree.sorted_btree.remove" title="Permalink to this definition">¶</a></dt>
+<tt class="descname">remove</tt><big>(</big><big>)</big><a class="headerlink" href="#btree.sorted_btree.remove" title="Permalink to this definition">¶</a></dt>
 <dd><p>remove an object from the sorted_btree if found by == comparison</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
-<li><strong>obj</strong> &#8211; the object to remove</li>
-</ul>
-</td>
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>obj</strong> &#8211; the object to remove</td>
 </tr>
-<tr class="field"><th class="field-name">Raises :</th><td class="field-body"><p class="first"><tt class="docutils literal"><span class="pre">ValueError</span></tt> if the object is not in the sorted_btree</p>
-</td>
+<tr class="field-even field"><th class="field-name">Raises :</th><td class="field-body"><tt class="docutils literal"><span class="pre">ValueError</span></tt> if the object is not in the sorted_btree</td>
 </tr>
-<tr class="field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last"><tt class="xref docutils literal"><span class="pre">None</span></tt></p>
-</td>
+<tr class="field-odd field"><th class="field-name">Returns:</th><td class="field-body"><tt class="docutils literal"><span class="pre">None</span></tt></td>
 </tr>
 </tbody>
 </table>
 </dd></dl>
 
-<dl class="attribute">
+<dl class="method">
 <dt id="btree.sorted_btree.split">
-<tt class="descname">split</tt><a class="headerlink" href="#btree.sorted_btree.split" title="Permalink to this definition">¶</a></dt>
+<tt class="descname">split</tt><big>(</big><big>)</big><a class="headerlink" href="#btree.sorted_btree.split" title="Permalink to this definition">¶</a></dt>
 <dd><p>divide the sorted_btree into 2 by a separator value</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
 <li><strong>separator</strong> &#8211; the split point &#8211; objects greater than <tt class="docutils literal"><span class="pre">separator</span></tt> go into the left
 sorted_btree, objects less than go into the right sorted_btree</li>
-<li><strong>eq_goes_left</strong> (<em>bool</em>) &#8211; if <tt class="xref docutils literal"><span class="pre">False</span></tt> then objects that are <tt class="docutils literal"><span class="pre">==</span> <span class="pre">separator</span></tt> go into the right
-subtree, otherwise they go to the left. defaults to <tt class="xref docutils literal"><span class="pre">True</span></tt></li>
+<li><strong>eq_goes_left</strong> (<em>bool</em>) &#8211; if <tt class="docutils literal"><span class="pre">False</span></tt> then objects that are <tt class="docutils literal"><span class="pre">==</span> <span class="pre">separator</span></tt> go into the right
+subtree, otherwise they go to the left. defaults to <tt class="docutils literal"><span class="pre">True</span></tt></li>
 </ul>
 </td>
 </tr>
-<tr class="field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last">a two-tuple of (<tt class="docutils literal"><span class="pre">left_tree</span></tt>, <tt class="docutils literal"><span class="pre">right_tree</span></tt>). the <tt class="docutils literal"><span class="pre">left_tree</span></tt> is
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last">a two-tuple of (<tt class="docutils literal"><span class="pre">left_tree</span></tt>, <tt class="docutils literal"><span class="pre">right_tree</span></tt>). the <tt class="docutils literal"><span class="pre">left_tree</span></tt> is
 actually the original tree, which has now been modified.</p>
 </td>
 </tr>
@@ -239,7 +223,7 @@ actually the original tree, which has now been modified.</p>
 <div id="searchbox" style="display: none">
   <h3>Quick search</h3>
     <form class="search" action="search.html" method="get">
-      <input type="text" name="q" size="18" />
+      <input type="text" name="q" />
       <input type="submit" value="Go" />
       <input type="hidden" name="check_keywords" value="yes" />
       <input type="hidden" name="area" value="default" />
@@ -265,12 +249,12 @@ actually the original tree, which has now been modified.</p>
         <li class="right" >
           <a href="index.html" title="Welcome to btree’s documentation!"
              >previous</a> |</li>
-        <li><a href="index.html">btree v0.1.0 documentation</a> &raquo;</li> 
+        <li><a href="index.html">btree 0.2.1 documentation</a> &raquo;</li> 
       </ul>
     </div>
     <div class="footer">
-        &copy; Copyright 2011, Travis J Parker.
-      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.0.5.
+        &copy; Copyright 2013, Travis J Parker.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.1.3.
     </div>
   </body>
 </html>
