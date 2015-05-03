@@ -232,10 +232,23 @@ sorted_btree_object_init(PyObject *self, PyObject *args, PyObject *kwargs) {
     tree->flags = 0;
 
     if (!PyArg_ParseTupleAndKeywords(
-                args, kwargs, "O!", btree_init_args, &PyInt_Type, &order))
+                args,
+                kwargs,
+                "O!",
+                btree_init_args,
+#if PY_MAJOR_VERSION >= 3
+                &PyLong_Type,
+#else
+                &PyInt_Type,
+#endif
+                &order))
         return -1;
 
+#if PY_MAJOR_VERSION >= 3
+    tree->order = (int)PyLong_AsLong(order);
+#else
     tree->order = (int)PyInt_AsLong(order);
+#endif
     tree->depth = 0;
     tree->root = allocate_node(0, tree->order);
     tree->flags |= BT_FLAG_INITED;
@@ -266,7 +279,7 @@ sorted_btree_dealloc(btsort_pyobject *self) {
     PyObject_GC_UnTrack(self);
     if (self->flags & BT_FLAG_INITED)
         traverse_nodes(self, 0, dealloc_visitor, NULL);
-    self->ob_type->tp_free((PyObject *)self);
+    Py_TYPE(self)->tp_free((PyObject *)self);
 }
 
 
@@ -340,7 +353,11 @@ repr_visit(bt_node_t *node, char is_branch, int depth, void *data) {
     for (i = 0; i < node->filled; ++i) {
         reprd = PyObject_Repr(node->values[i]);
         if (reprd == NULL) return -1;
+#if PY_MAJOR_VERSION >= 3
+        j += sprintf(item_str + j, "%ls, ", PyUnicode_AsUnicode(reprd));
+#else
         j += sprintf(item_str + j, "%s, ", PyString_AsString(reprd));
+#endif
         Py_DECREF(reprd);
     }
 
@@ -366,7 +383,11 @@ python_sorted_btree_repr(PyObject *self) {
     offsetstring *string;
     if ((rc = Py_ReprEnter(self))) {
         if (rc < 0) return NULL;
+#if PY_MAJOR_VERSION >= 3
+        return PyUnicode_FromString("<...>");
+#else
         return PyString_FromString("<...>");
+#endif
     }
 
     offsetstring_new(string, &rc);
@@ -378,8 +399,13 @@ python_sorted_btree_repr(PyObject *self) {
     if (traverse_nodes(tree, 1, repr_visit, (void *)string))
         result = NULL;
     else
+#if PY_MAJOR_VERSION >= 3
+        result = PyUnicode_FromStringAndSize(
+                offsetstring_data(string), offsetstring_offset(string) - 1);
+#else
         result = PyString_FromStringAndSize(
                 offsetstring_data(string), offsetstring_offset(string) - 1);
+#endif
 
     Py_ReprLeave(self);
     offsetstring_del(string);
@@ -550,7 +576,7 @@ sorted_btree_iterator_dealloc(btsort_iter_pyobject *self) {
     Py_DECREF(self->path->tree);
 
     PyObject_GC_UnTrack(self);
-    self->ob_type->tp_free((PyObject *)self);
+    Py_TYPE(self)->tp_free((PyObject *)self);
 }
 
 
@@ -642,7 +668,16 @@ python_sorted_btree_bulkload(PyObject *klass, PyObject *args) {
     int i, result;
     PyObject *item_list, *order, *iter, *item, *prev = NULL;
 
-    if (!PyArg_ParseTuple(args, "OO!", &item_list, &PyInt_Type, &order))
+    if (!PyArg_ParseTuple(
+                args,
+                "OO!",
+                &item_list,
+#if PY_MAJOR_VERSION >= 3
+                &PyLong_Type,
+#else
+                &PyInt_Type,
+#endif
+                &order))
         return NULL;
 
     if ((iter = PyObject_GetIter(item_list)) == NULL)
@@ -673,7 +708,11 @@ python_sorted_btree_bulkload(PyObject *klass, PyObject *args) {
     btsort_pyobject *tree = PyObject_GC_New(
             btsort_pyobject, &btsort_pytypeobj);
 
+#if PY_MAJOR_VERSION >= 3
+    if (bulkload(tree, iter, (int)PyLong_AsLong(order)))
+#else
     if (bulkload(tree, iter, (int)PyInt_AsLong(order)))
+#endif
         return NULL;
 
     return (PyObject *)tree;
@@ -917,8 +956,7 @@ integer that indicates the most data items a single node may hold.");
  * the full type definition for the python object
  */
 PyTypeObject btsort_pytypeobj = {
-    PyObject_HEAD_INIT(&PyType_Type)
-    0,
+    PyVarObject_HEAD_INIT(&PyType_Type, 0)
     "btree.sorted_btree",
     sizeof(btsort_pyobject),
     0,

@@ -60,7 +60,7 @@ def clean():
         if p.endswith(".pyc") or p.endswith(".pyo"):
             try:
                 p.remove()
-            except OSError, exc:
+            except OSError as exc:
                 if exc.args[0] == errno.EACCES:
                     continue
                 raise

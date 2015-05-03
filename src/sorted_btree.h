@@ -54,6 +54,19 @@ typedef bt_iter_pyobject btsort_iter_pyobject;
  */
 PyTypeObject btsort_pytypeobj;
 
+#if PY_MAJOR_VERSION >= 3
+    static struct PyModuleDef moduledef = {
+        PyModuleDef_HEAD_INIT,
+        "sorted_btree",      /* m_name */
+        "BTree implementation as a C python extension",  /* m_doc */
+        -1,                  /* m_size */
+        NULL,                /* m_methods */
+        NULL,                /* m_reload */
+        NULL,                /* m_traverse */
+        NULL,                /* m_clear */
+        NULL,                /* m_free */
+    };
+#endif
 
 #ifdef __cplusplus
 }
