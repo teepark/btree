@@ -38,12 +38,24 @@
  * module initializer
  */
 PyMODINIT_FUNC
-initbtree(void) {
-    PyObject *module = Py_InitModule("btree", NULL);
-    Py_INCREF(&btsort_pytypeobj);
+#if PY_MAJOR_VERSION >= 3
+PyInit_btree(void)
+#else
+initbtree(void)
+#endif
+{
+    PyObject *module;
+#if PY_MAJOR_VERSION >= 3
+    module = PyModule_Create(&moduledef);
+#else
+    module = Py_InitModule("btree", NULL);
+#endif
 
     if (PyType_Ready(&btsort_pytypeobj) < 0)
-        return;
+        return NULL;
+
+    Py_INCREF(&btsort_pytypeobj);
     PyModule_AddObject(module, "sorted_btree",
             (PyObject *)(&btsort_pytypeobj));
+    return module;
 }

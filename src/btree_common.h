@@ -137,6 +137,17 @@ typedef int (*bt_item_visitor)(
     Py_DECREF(__printf_pyobj);                                         \
 } while(0)
 
+/*
+ * Comptibility with python < 2.6
+ */
+#ifndef Py_TYPE
+    #define Py_TYPE(ob) (((PyObject*)(ob))->ob_type)
+#endif
+
+#ifndef PyVarObject_HEAD_INIT
+    #define PyVarObject_HEAD_INIT(type, size) \
+            PyObject_HEAD_INIT(type) size,
+#endif
 
 #ifdef __cplusplus
 }
